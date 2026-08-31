@@ -3,6 +3,10 @@
 // IGAD/NHTV/BUAS/UU - Jacco Bikker - 2006-2024
 
 #include "precomp.h"
+#include "unix_shims.h"
+#ifndef _MSC_VER
+#include <strings.h>
+#endif
 
 using namespace std;
 
@@ -25,7 +29,7 @@ void FatalError( const char* fmt, ... )
 #ifdef _MSC_VER
 	MessageBox( NULL, t, "Fatal error", MB_OK );
 #else
-	fprintf( stderr, t );
+	fprintf(stderr, "%s", t);
 #endif
 	while (1) exit( 0 );
 }
@@ -554,12 +558,30 @@ bool Kernel::InitCL()
 			}
 			if (hasAll)
 			{
+				#ifdef _WIN32
 				cl_context_properties props[] =
 				{
-					CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetWGLContext( window ),
-					CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
-					CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0
+					CL_GL_CONTEXT_KHR,
+					(cl_context_properties)glfwGetWGLContext(window),
+					CL_WGL_HDC_KHR,
+					(cl_context_properties)wglGetCurrentDC(),
+					CL_CONTEXT_PLATFORM,
+					(cl_context_properties)platform,
+					0
 				};
+				#elif defined(__linux__)
+				cl_context_properties props[] =
+				{
+					CL_GL_CONTEXT_KHR,
+					(cl_context_properties)glfwGetGLXContext(window),
+					CL_GLX_DISPLAY_KHR,
+					(cl_context_properties)glfwGetX11Display(),
+					CL_CONTEXT_PLATFORM,
+					(cl_context_properties)platform,
+					0
+				};
+				#endif
+
 				// attempt to create a context with the requested features
 				context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
 				if (error == CL_SUCCESS)

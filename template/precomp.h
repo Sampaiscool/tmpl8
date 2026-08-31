@@ -1,3 +1,5 @@
+#pragma once
+
 // Template, 2024 IGAD Edition
 // Get the latest version from: https://github.com/jbikker/tmpl8
 // IGAD/NHTV/BUAS/UU - Jacco Bikker - 2006-2024
@@ -14,7 +16,7 @@
 #include <list>					// standard template library std::list
 #include <algorithm>			// standard algorithms for stl containers
 #include <string>				// strings
-// #include <thread>			// currently unused; enable to use Windows threads.
+// #include <thread>			    // currently unused; enable to use Windows threads.
 #include <math.h>				// c standard math library
 #include <assert.h>				// runtime assertions
 
@@ -22,6 +24,7 @@
 // if your CPU does not support this (unlikely), include the appropriate header instead.
 // see: https://stackoverflow.com/a/11228864/2844473
 #include <immintrin.h>
+#include "simd_shims.h"
 
 // shorthand for basic types
 typedef unsigned char uchar;
@@ -65,6 +68,7 @@ using namespace Tmpl8;
 // clang-format off
 
 // windows.h: disable a few things to speed up compilation.
+#ifdef _WIN32
 #define NOMINMAX
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -107,6 +111,7 @@ using namespace Tmpl8;
 #define NOMCX
 #define NOIME
 #include "windows.h"
+#endif // ifdef _WIN32
 
 // cross-platform directory access
 #ifdef _MSC_VER
@@ -120,13 +125,18 @@ using namespace Tmpl8;
 // OpenCL headers
 // #define CL_USE_DEPRECATED_OPENCL_2_0_APIS // safe; see https://stackoverflow.com/a/28500846
 #define CL_TARGET_OPENCL_VERSION 300
-#include "cl/cl.h"
-#include <cl/cl_gl.h>
+#include "CL/cl.h"
+#include <CL/cl_gl.h>
 
 // GLFW
 #define GLFW_USE_CHDIR 0
+#if defined(_WIN32)
 #define GLFW_EXPOSE_NATIVE_WIN32
 #define GLFW_EXPOSE_NATIVE_WGL
+#elif defined(__linux__)
+#define GLFW_EXPOSE_NATIVE_GLX
+#define GLFW_EXPOSE_NATIVE_X11
+#endif
 #include <glad.h>
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
@@ -159,6 +169,7 @@ struct Timer
 };
 
 // Nils's jobmanager
+#ifdef _WIN32
 class Job
 {
 public:
@@ -200,6 +211,7 @@ protected:
 	unsigned int m_NumThreads, m_JobCount;
 	JobThread* m_JobThreadList;
 };
+#endif // ifdef _WIN32
 
 // forward declaration of helper functions
 void FatalError( const char* fmt, ... );
@@ -219,7 +231,7 @@ void TextFileWrite( const string& text, const char* _File );
 #define cpuid(info, x) __cpuidex(info, x, 0)
 #else
 #include <cpuid.h>
-void cpuid( int info[4], int InfoType ) { __cpuid_count( InfoType, 0, info[0], info[1], info[2], info[3] ); }
+inline void cpuid( int info[4], int InfoType ) { __cpuid_count( InfoType, 0, info[0], info[1], info[2], info[3] ); }
 #endif
 class CPUCaps // from https://github.com/Mysticial/FeatureDetector
 {

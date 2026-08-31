@@ -5,7 +5,13 @@
 #include "precomp.h"
 #include "game.h"
 
+#include <sys/stat.h>
+
+#ifdef _MSC_VER
 #pragma comment( linker, "/subsystem:windows /ENTRY:mainCRTStartup" )
+#endif
+
+#include "unix_shims.h"
 
 using namespace Tmpl8;
 
@@ -118,6 +124,7 @@ int main()
 	CheckGL();
 	// we want a console window for text output
 #ifndef FULLSCREEN
+#ifdef _WIN32
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
 	AllocConsole();
 	GetConsoleScreenBufferInfo( GetStdHandle( STD_OUTPUT_HANDLE ), &coninfo );
@@ -128,6 +135,7 @@ int main()
 	freopen_s( &file, "CON", "w", stdout );
 	freopen_s( &file, "CON", "w", stderr );
 	SetWindowPos( GetConsoleWindow(), HWND_TOP, 0, 0, 1280, 800, 0 );
+#endif // ifdef _WIN32
 	glfwShowWindow( window );
 	// use the new console window to print some important things
 	printf( "Running Tmpl8-2024, updated on July 21\n" );
@@ -356,6 +364,8 @@ int main()
 	return 0;
 }
 
+#ifdef _WIN32
+
 // Jobmanager implementation
 DWORD JobThreadProc( LPVOID lpParameter )
 {
@@ -498,6 +508,8 @@ JobManager* JobManager::GetJobManager()
 	}
 	return m_JobManager;
 }
+
+#endif // ifdef _WIN32
 
 // Helper functions
 bool FileIsNewer( const char* file1, const char* file2 )

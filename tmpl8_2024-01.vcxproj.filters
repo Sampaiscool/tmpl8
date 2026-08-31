@@ -47,6 +47,12 @@
     <ClInclude Include="template\tmpl8math.h">
       <Filter>template</Filter>
     </ClInclude>
+    <ClInclude Include="template\unix_shims.h">
+      <Filter>template</Filter>
+    </ClInclude>
+    <ClInclude Include="template\simd_shims.h">
+      <Filter>template</Filter>
+    </ClInclude>
     <ClInclude Include="cl\tools.cl">
       <Filter>kernels</Filter>
     </ClInclude>

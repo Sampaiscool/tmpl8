@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <cstring>
+
 namespace Tmpl8
 {
 
@@ -571,7 +573,7 @@ public:
 	mat2( float2 a, float2 b ) { cell[0] = a.x, cell[1] = b.x, cell[2] = a.y, cell[3] = b.y; }
 	// mat2( float2 a, float2 b ) { cell[0] = a.x, cell[1] = a.y, cell[2] = b.x, cell[3] = b.y; }
 	mat2( float a, float b, float c, float d ) { cell[0] = a, cell[1] = b, cell[2] = c, cell[3] = d; }
-	__declspec(align(16)) float cell[4] = { 1, 0, 0, 1 };
+	alignas(16) float cell[4] = { 1, 0, 0, 1 };
 	constexpr static mat2 Identity() { return mat2{}; }
 	float operator()( const int i, const int j ) const { return cell[i * 2 + j]; }
 	float& operator()( const int i, const int j ) { return cell[i * 2 + j]; }
@@ -582,7 +584,7 @@ class mat4
 {
 public:
 	mat4() = default;
-	__declspec(align(64)) float cell[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+	alignas(64) float cell[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
 	float& operator [] ( const int idx ) { return cell[idx]; }
 	const float& operator [] ( const int idx ) const { return cell[idx]; }
 	float operator()( const int i, const int j ) const { return cell[i * 4 + j]; }
@@ -761,8 +763,8 @@ public:
 	{
 		// via https://stackoverflow.com/questions/983999/simple-3x3-matrix-inverse-code-c
 		const float invdet = 1.0f / (cell[0] * (cell[5] * cell[10] - cell[6] * cell[9]) -
-			cell[4] * (cell[1] * cell[10] - cell[9] * cell[2]) +
-			cell[8] * (cell[1] * cell[6] - cell[5] * cell[2]));
+		cell[4] * (cell[1] * cell[10] - cell[9] * cell[2]) +
+		cell[8] * (cell[1] * cell[6] - cell[5] * cell[2]));
 		mat4 R;
 		R.cell[0] = (cell[5] * cell[10] - cell[6] * cell[9]) * invdet;
 		R.cell[4] = (cell[8] * cell[6] - cell[4] * cell[10]) * invdet;
@@ -983,12 +985,16 @@ public:
 	{
 		struct
 		{
-			union { __m128 bmin4; float bmin[4]; struct { float3 bmin3; }; };
-			union { __m128 bmax4; float bmax[4]; struct { float3 bmax3; }; };
+			union { __m128 bmin4; float bmin[4]; };
+			union { __m128 bmax4; float bmax[4]; };
 		};
 		__m128 bounds[2] = { _mm_setr_ps( 1e34f, 1e34f, 1e34f, 0 ), _mm_setr_ps( -1e34f, -1e34f, -1e34f, 0 ) };
 	};
-#pragma warning ( pop )
+	#pragma warning ( pop )
+	__inline float3&       bmin3()       { return *reinterpret_cast<float3*>( &bmin4 ); }
+	__inline const float3& bmin3() const { return *reinterpret_cast<const float3*>( &bmin4 ); }
+	__inline float3&       bmax3()       { return *reinterpret_cast<float3*>( &bmax4 ); }
+	__inline const float3& bmax3() const { return *reinterpret_cast<const float3*>( &bmax4 ); }
 	__inline void SetBounds( const __m128 min4, const __m128 max4 ) { bmin4 = min4; bmax4 = max4; }
 	__inline __m128 Center() const { return _mm_mul_ps( _mm_add_ps( bmin4, bmax4 ), _mm_set_ps1( 0.5f ) ); }
 	__inline float Center( uint axis ) const { return (bmin[axis] + bmax[axis]) * 0.5f; }
@@ -1020,6 +1026,7 @@ float half_to_float( const half x );
 half float_to_half( const float x );
 
 // bad float detection (method from OpenCV)
+#ifdef _MSC_VER
 inline bool isnan( const float value )
 {
 	const uint ieee754 = *reinterpret_cast<const uint*>(&value);
@@ -1030,6 +1037,10 @@ inline bool isinf( const float value )
 	const uint ieee754 = *reinterpret_cast<const uint*>(&value);
 	return (ieee754 & 0x7fffffff) == 0x7f800000;
 }
+#else
+using std::isnan;
+using std::isinf;
+#endif
 inline bool badfloat( const float value )
 {
 	const uint ieee754 = *reinterpret_cast<const uint*>(&value);

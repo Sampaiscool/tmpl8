@@ -13,6 +13,8 @@ using namespace tinybvh;
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #include "tiny_gltf.h"
 
+#include "unix_shims.h"
+
 // 'declaration of x hides previous local declaration'
 #pragma warning( disable: 4456)
 
@@ -2378,8 +2380,8 @@ void Scene::UpdateSceneGraph( const float deltaTime )
 		const uint blasCount = (uint)meshPool.size();
 		for (uint i = 0; i < blasCount; i++)
 		{
-			m.vertices[i * 3 + 0] = meshPool[i]->worldBounds.bmin3;
-			m.vertices[i * 3 + 1] = m.vertices[i * 3 + 2] = meshPool[i]->worldBounds.bmax3;
+			m.vertices[i * 3 + 0] = meshPool[i]->worldBounds.bmin3();
+			m.vertices[i * 3 + 1] = m.vertices[i * 3 + 2] = meshPool[i]->worldBounds.bmax3();
 		}
 		// if (!tlas) tlas = new BVH(); - TODO
 		// tlas->Build( &m, blasCount ); - TODO

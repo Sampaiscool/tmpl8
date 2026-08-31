@@ -41,8 +41,12 @@ THE SOFTWARE.
 // - Heuristic Ray Shooting Algorithms:
 //   https://dcgi.fel.cvut.cz/home/havran/DISSVH/phdthesis.html
 
+
 #ifndef TINY_BVH_H_
 #define TINY_BVH_H_
+
+#include <assert.h>
+#include <memory>
 
 // binned BVH building: bin count
 #define BVHBINS 8
@@ -289,8 +293,6 @@ public:
 
 #ifdef TINYBVH_IMPLEMENTATION
 
-#include <assert.h>
-
 // Basic binned-SAH-builder. This is the reference builder; it yields a decent
 // tree suitable for ray tracing on the CPU. The code is platform-independent.
 // Faster code, using SSE/AVX, is available for x64 CPUs.
@@ -412,13 +414,13 @@ void BVH::Build( const bvhvec4* vertices, const uint primCount )
 // The code relies on the availability of AVX instructions. AVX2 is not needed.
 __forceinline float halfArea( const __m128 a /* a contains extent of aabb */ )
 {
-	return a.m128_f32[0] * a.m128_f32[1] + a.m128_f32[1] * a.m128_f32[2] + a.m128_f32[2] * a.m128_f32[3];
+	return m128_f32(a)[0] * m128_f32(a)[1] + m128_f32(a)[1] * m128_f32(a)[2] + m128_f32(a)[2] * m128_f32(a)[3];
 }
 __forceinline float halfArea( const __m256 a /* a contains aabb itself, with min.xyz negated */ )
 {
 	const __m128 q = _mm256_castps256_ps128( _mm256_add_ps( _mm256_permute2f128_ps( a, a, 5 ), a ) );
 	const __m128 v = _mm_mul_ps( q, _mm_shuffle_ps( q, q, 9 ) );
-	return v.m128_f32[0] + v.m128_f32[1] + v.m128_f32[2];
+	return m128_f32(v)[0] + m128_f32(v)[1] + m128_f32(v)[2];
 }
 #define PROCESS_PLANE( a, pos, ANLR, lN, rN, lb, rb ) if (lN * rN != 0) { \
 	ANLR = halfArea( lb ) * (float)lN + halfArea( rb ) * (float)rN; if (ANLR < splitCost) \
@@ -494,7 +496,7 @@ void BVH::BuildAVX( const bvhvec4* vertices, const uint primCount )
 			__m256 r0, r1, r2, f = frag8[fi];
 			__m128i bi4 = _mm_cvtps_epi32( _mm_sub_ps( _mm_mul_ps( _mm_sub_ps( _mm_sub_ps( frag4[fi].bmax4, frag4[fi].bmin4 ), nmin4 ), rpd4 ), half4 ) );
 			memcpy( binbox, binboxOrig, sizeof( binbox ) );
-			uint i0 = bi4.m128i_i32[0], i1 = bi4.m128i_i32[1], i2 = bi4.m128i_i32[2], * ti = triIdx + node.leftFirst + 1;
+			uint i0 = m128i_i32(bi4)[0], i1 = m128i_i32(bi4)[1], i2 = m128i_i32(bi4)[2], * ti = triIdx + node.leftFirst + 1;
 			for (uint i = 0; i < node.triCount - 1; i++)
 			{
 				const uint fid = *ti++;
@@ -503,9 +505,9 @@ void BVH::BuildAVX( const bvhvec4* vertices, const uint primCount )
 				r0 = _mm256_max_ps( b0, f ), r1 = _mm256_max_ps( b1, f ), r2 = _mm256_max_ps( b2, f );
 				const __m128i b4 = _mm_cvtps_epi32( _mm_sub_ps( _mm_mul_ps( _mm_sub_ps( _mm_sub_ps( fmax, fmin ), nmin4 ), rpd4 ), half4 ) );
 				f = frag8[fid], count[0][i0]++, count[1][i1]++, count[2][i2]++;
-				binbox[i0] = r0, i0 = b4.m128i_i32[0];
-				binbox[BVHBINS + i1] = r1, i1 = b4.m128i_i32[1];
-				binbox[2 * BVHBINS + i2] = r2, i2 = b4.m128i_i32[2];
+				binbox[i0] = r0, i0 = m128i_i32(b4)[0];
+				binbox[BVHBINS + i1] = r1, i1 = m128i_i32(b4)[1];
+				binbox[2 * BVHBINS + i2] = r2, i2 = m128i_i32(b4)[2];
 			}
 			// final business for final fragment
 			const __m256 b0 = binbox[i0], b1 = binbox[BVHBINS + i1], b2 = binbox[2 * BVHBINS + i2];
