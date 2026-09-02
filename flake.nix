@@ -56,6 +56,7 @@
               xorg.libXcursor
               xorg.libXi
               llvmPackages.openmp
+              wayland
             ];
           };
         };

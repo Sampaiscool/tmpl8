@@ -140,6 +140,9 @@ using namespace Tmpl8;
 #elif defined(__linux__)
 #define GLFW_EXPOSE_NATIVE_GLX
 #define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_WAYLAND
+#elif defined(__APPLE__)
+#define GLFW_EXPOSE_NATIVE_COCOA
 #endif
 #include <glad.h>
 #include <GLFW/glfw3.h>

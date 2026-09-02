@@ -41,6 +41,12 @@ target_link_libraries(myGame PRIVATE
 if(WIN32)
     set_target_properties(myGame PROPERTIES WIN32_EXECUTABLE ON)
     target_link_libraries(myGame PRIVATE winmm advapi32 user32 gdi32 shell32)
+elseif(UNIX AND NOT APPLE)
+    target_link_libraries(myGame PRIVATE EGL)
+elseif(APPLE)
+    target_link_libraries(myGame PRIVATE
+        "-framework OpenGL"
+        "-framework Cocoa")
 endif()
 
 if(MSVC)

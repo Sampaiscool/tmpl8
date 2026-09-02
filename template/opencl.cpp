@@ -3,9 +3,18 @@
 // IGAD/NHTV/BUAS/UU - Jacco Bikker - 2006-2024
 
 #include "precomp.h"
+
 #include "unix_shims.h"
+
 #ifndef _MSC_VER
 #include <strings.h>
+#endif
+
+#if defined(__linux__)
+#include <EGL/egl.h>
+#include <GL/glx.h>
+#elif defined(__APPLE__)
+#include <OpenGL/OpenGL.h>
 #endif
 
 using namespace std;
@@ -569,21 +578,54 @@ bool Kernel::InitCL()
 					(cl_context_properties)platform,
 					0
 				};
+			    // attempt to create a context with the requested features
+                context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
+
 				#elif defined(__linux__)
-				cl_context_properties props[] =
+				if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND)
 				{
-					CL_GL_CONTEXT_KHR,
-					(cl_context_properties)glfwGetGLXContext(window),
-					CL_GLX_DISPLAY_KHR,
-					(cl_context_properties)glfwGetX11Display(),
-					CL_CONTEXT_PLATFORM,
-					(cl_context_properties)platform,
-					0
-				};
+                    cl_context_properties props[] =
+                    {
+                        CL_GL_CONTEXT_KHR,
+                        (cl_context_properties)eglGetCurrentContext(),
+                        CL_EGL_DISPLAY_KHR,
+                        (cl_context_properties)eglGetCurrentDisplay(),
+                        CL_CONTEXT_PLATFORM,
+                        (cl_context_properties)platform,
+                        0
+                    };
+                    // attempt to create a context with the requested features
+                    context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
+				}
+				else // X11
+				{
+                    cl_context_properties props[] =
+                    {
+                        CL_GL_CONTEXT_KHR,
+                        (cl_context_properties)glXGetCurrentContext(),
+                        CL_GLX_DISPLAY_KHR,
+                        (cl_context_properties)glXGetCurrentDisplay(),
+                        CL_CONTEXT_PLATFORM,
+                        (cl_context_properties)platform,
+                        0
+                    };
+                    // attempt to create a context with the requested features
+                    context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
+				}
+
+				#elif defined(__APPLE__)
+				cl_context_properties props[] =
+                {
+                    CL_CGL_SHAREGROUP_KHR,
+                    (cl_context_properties)CGLGetShareGroup(CGLGetCurrentContext()),
+                    CL_CONTEXT_PLATFORM,
+                    (cl_context_properties)platform,
+                    0
+                };
+			    // attempt to create a context with the requested features
+                context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
 				#endif
 
-				// attempt to create a context with the requested features
-				context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
 				if (error == CL_SUCCESS)
 				{
 					candoInterop = true;
