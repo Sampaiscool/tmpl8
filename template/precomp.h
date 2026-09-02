@@ -24,7 +24,11 @@
 // if your CPU does not support this (unlikely), include the appropriate header instead.
 // see: https://stackoverflow.com/a/11228864/2844473
 #include <immintrin.h>
+
 #include "simd_shims.h"
+#ifndef _WIN32
+#include "pthread.h"
+#endif
 
 // shorthand for basic types
 typedef unsigned char uchar;
@@ -168,8 +172,22 @@ struct Timer
 	chrono::high_resolution_clock::time_point start;
 };
 
+#ifndef _WIN32
+class p_event {
+public:
+    p_event() = default;
+    ~p_event();
+    void Set();
+    void Wait();
+    bool IsSet();
+private:
+    pthread_mutex_t m_Mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t  m_Cond  = PTHREAD_COND_INITIALIZER;
+    bool m_Signaled = false;
+};
+#endif
+
 // Nils's jobmanager
-#ifdef _WIN32
 class Job
 {
 public:
@@ -184,8 +202,15 @@ public:
 	void CreateAndStartThread( unsigned int threadId );
 	void Go();
 	void BackgroundTask();
-	HANDLE m_GoSignal, m_ThreadHandle;
 	int m_ThreadID;
+
+protected:
+#ifdef _WIN32
+	HANDLE m_GoSignal, m_ThreadHandle;
+#else
+    pthread_t m_ThreadHandle;
+    p_event m_GoSignal;
+#endif
 };
 class JobManager	// singleton class!
 {
@@ -206,12 +231,17 @@ protected:
 	Job* GetNextJob();
 	static JobManager* m_JobManager;
 	Job* m_JobList[256];
-	CRITICAL_SECTION m_CS;
-	HANDLE m_ThreadDone[64];
 	unsigned int m_NumThreads, m_JobCount;
 	JobThread* m_JobThreadList;
+
+#ifdef _WIN32
+	CRITICAL_SECTION m_CS;
+	HANDLE m_ThreadDone[64];
+#else
+    pthread_mutex_t m_CS;
+    p_event m_ThreadDone[64];
+#endif
 };
-#endif // ifdef _WIN32
 
 // forward declaration of helper functions
 void FatalError( const char* fmt, ... );

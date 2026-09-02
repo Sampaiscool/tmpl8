@@ -12,6 +12,10 @@
 #endif
 
 #include "unix_shims.h"
+#ifndef __WIN32
+#include <pthread.h>
+#include <sched.h>
+#endif
 
 using namespace Tmpl8;
 
@@ -364,28 +368,70 @@ int main()
 	return 0;
 }
 
-#ifdef _WIN32
+#ifndef _WIN32
+p_event::~p_event() {
+    pthread_cond_destroy(&m_Cond);
+    pthread_mutex_destroy(&m_Mutex);
+}
+void p_event::Set()
+{
+    pthread_mutex_lock(&m_Mutex);
+    m_Signaled = true;
+    pthread_cond_signal(&m_Cond);
+    pthread_mutex_unlock(&m_Mutex);
+}
+bool p_event::IsSet() {
+    pthread_mutex_lock(&m_Mutex);
+    bool result = m_Signaled;
+    pthread_mutex_unlock(&m_Mutex);
+    return result;
+}
+void p_event::Wait()
+{
+    pthread_mutex_lock(&m_Mutex);
+    while (!m_Signaled)
+        pthread_cond_wait(&m_Cond, &m_Mutex);
+    m_Signaled = false;
+    pthread_mutex_unlock(&m_Mutex);
+}
+#endif
 
 // Jobmanager implementation
-DWORD JobThreadProc( LPVOID lpParameter )
+#ifdef _WIN32
+DWORD JobThreadProc(LPVOID p)
+#else
+void* JobThreadProc(void* p)
+#endif
 {
-	JobThread* JobThreadInstance = (JobThread*)lpParameter;
+	JobThread* JobThreadInstance = static_cast<JobThread*>(p);
 	if (JobThreadInstance /* just here to avoid 'unreachable code' warning */)
 		JobThreadInstance->BackgroundTask();
-	return 0;
+#ifdef _WIN32
+    return 0;
+#else
+    return nullptr;
+#endif
 }
 
 void JobThread::CreateAndStartThread( unsigned int threadId )
 {
+#ifdef _WIN32
 	m_GoSignal = CreateEvent( 0, FALSE, FALSE, 0 );
 	m_ThreadHandle = CreateThread( 0, 0, (LPTHREAD_START_ROUTINE)&JobThreadProc, (LPVOID)this, 0, 0 );
-	m_ThreadID = threadId;
+#else
+    pthread_create(&m_ThreadHandle, nullptr, JobThreadProc, this);
+#endif
+    m_ThreadID = threadId;
 }
 void JobThread::BackgroundTask()
 {
 	while (1)
 	{
+#ifdef _WIN32
 		WaitForSingleObject( m_GoSignal, INFINITE );
+#else
+        m_GoSignal.Wait();
+#endif
 		while (1)
 		{
 			Job* job = JobManager::GetJobManager()->GetNextJob();
@@ -401,7 +447,11 @@ void JobThread::BackgroundTask()
 
 void JobThread::Go()
 {
+#ifdef _WIN32
 	SetEvent( m_GoSignal );
+#else
+    m_GoSignal.Set();
+#endif
 }
 
 void Job::RunCodeWrapper()
@@ -413,12 +463,20 @@ JobManager* JobManager::m_JobManager = 0;
 
 JobManager::JobManager( unsigned int threads ) : m_NumThreads( threads )
 {
+#ifdef _WIN32
 	InitializeCriticalSection( &m_CS );
+#else
+    pthread_mutex_init(&m_CS, nullptr);
+#endif
 }
 
 JobManager::~JobManager()
 {
+#ifdef _WIN32
 	DeleteCriticalSection( &m_CS );
+#else
+    pthread_mutex_destroy(&m_CS);
+#endif
 }
 
 void JobManager::CreateJobManager( unsigned int numThreads )
@@ -428,7 +486,11 @@ void JobManager::CreateJobManager( unsigned int numThreads )
 	for (unsigned int i = 0; i < numThreads; i++)
 	{
 		m_JobManager->m_JobThreadList[i].CreateAndStartThread( i );
+#ifdef _WIN32
 		m_JobManager->m_ThreadDone[i] = CreateEvent( 0, FALSE, FALSE, 0 );
+#else
+        m_JobManager->m_ThreadDone[i] = p_event{};
+#endif
 	}
 	m_JobManager->m_JobCount = 0;
 }
@@ -441,24 +503,44 @@ void JobManager::AddJob2( Job* a_Job )
 Job* JobManager::GetNextJob()
 {
 	Job* job = 0;
+#ifdef _WIN32
 	EnterCriticalSection( &m_CS );
+#else
+    pthread_mutex_lock(&m_CS);
+#endif
 	if (m_JobCount > 0) job = m_JobList[--m_JobCount];
+#ifdef _WIN32
 	LeaveCriticalSection( &m_CS );
+#else
+    pthread_mutex_unlock(&m_CS);
+#endif
 	return job;
 }
 
 void JobManager::RunJobs()
 {
 	if (m_JobCount == 0) return;
-	for (unsigned int i = 0; i < m_NumThreads; i++) m_JobThreadList[i].Go();
+	for (unsigned int i = 0; i < m_NumThreads; i++)
+	    m_JobThreadList[i].Go();
+#ifdef _WIN32
 	WaitForMultipleObjects( m_NumThreads, m_ThreadDone, TRUE, INFINITE );
+#else
+    // this is not ideal but should work
+    for (unsigned i = 0; i < m_NumThreads; ++i)
+        m_ThreadDone[i].Wait();
+#endif
 }
 
 void JobManager::ThreadDone( unsigned int n )
 {
+#ifdef _WIN32
 	SetEvent( m_ThreadDone[n] );
+#else
+    m_ThreadDone[n].Set();
+#endif
 }
 
+#ifdef _WIN32
 DWORD CountSetBits( ULONG_PTR bitMask )
 {
 	DWORD LSHIFT = sizeof( ULONG_PTR ) * 8 - 1, bitSetCount = 0;
@@ -466,9 +548,11 @@ DWORD CountSetBits( ULONG_PTR bitMask )
 	for (DWORD i = 0; i <= LSHIFT; ++i) bitSetCount += ((bitMask & bitTest) ? 1 : 0), bitTest /= 2;
 	return bitSetCount;
 }
+#endif
 
 void JobManager::GetProcessorCount( uint& cores, uint& logical )
 {
+#ifdef _WIN32
 	// https://github.com/GPUOpen-LibrariesAndSDKs/cpu-core-counts
 	cores = logical = 0;
 	char* buffer = NULL;
@@ -496,6 +580,15 @@ void JobManager::GetProcessorCount( uint& cores, uint& logical )
 			free( buffer );
 		}
 	}
+#else
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(set), &set) == 0)
+        logical = CPU_COUNT(&set);
+    else
+        logical = 1;
+    cores = logical; // fallback
+#endif
 }
 
 JobManager* JobManager::GetJobManager()
@@ -508,8 +601,6 @@ JobManager* JobManager::GetJobManager()
 	}
 	return m_JobManager;
 }
-
-#endif // ifdef _WIN32
 
 // Helper functions
 bool FileIsNewer( const char* file1, const char* file2 )
