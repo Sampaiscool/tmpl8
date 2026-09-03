@@ -5,62 +5,71 @@
 #include "precomp.h"
 #include "game.h"
 #include <iostream>
-#include <fstream>
-#include <nlohmann/json.hpp>
 
-using json = nlohmann::json;
+// --- FIX FOR X11 MACRO CONFLICT ---
+#ifdef None
+#undef None
+#endif
+
+#include "tileson.hpp"
 
 namespace Tmpl8
 {
 
 void Game::LoadTiledMap( const std::string& jsonPath )
 {
-	std::ifstream file( jsonPath );
-	if (!file.is_open()) return;
+  tson::Tileson t;
+	
+	// Parse het bestand
+	std::unique_ptr<tson::Map> parsedMap = t.parse( std::filesystem::path( jsonPath ) );
 
-	json mapJson;
-	file >> mapJson;
-
-	tileWidth = mapJson.value( "tilewidth", 16 );
-	tileHeight = mapJson.value( "tileheight", 16 );
-
-	// Pak de firstgid van de tileset uit de JSON
-	if (mapJson.contains("tilesets") && !mapJson["tilesets"].empty())
+	if (!parsedMap || parsedMap->getStatus() != tson::ParseStatus::OK)
 	{
-		firstGid = mapJson["tilesets"][0].value("firstgid", 1);
+		std::cout << "Tileson kon de map niet laden of het is geen geldige JSON: " << jsonPath << std::endl;
+		return;
 	}
+
+	tileWidth = parsedMap->getTileSize().x;
+	tileHeight = parsedMap->getTileSize().y;
 
 	mapChunks.clear();
 
-	if (mapJson.contains( "layers" ))
+	// Loop door alle lagen
+	for (auto& layer : parsedMap->getLayers())
 	{
-		for (const auto& layer : mapJson["layers"])
+		if (layer.getType() == tson::LayerType::TileLayer)
 		{
-			std::string layerType = layer.value( "type", layer.value( "class", "" ) );
-
-			if (layerType == "tilelayer")
+			// Unchunked / Normale lagen
+			if (layer.getChunks().empty())
 			{
-				if (layer.contains( "chunks" ))
+				TileChunk chunk;
+				chunk.x = 0;
+				chunk.y = 0;
+				chunk.width = layer.getSize().x;
+				chunk.height = layer.getSize().y;
+
+				// Verkrijg alle tile IDs
+				for (auto& [pos, tile] : layer.getTileData())
 				{
-					for (const auto& chunkJson : layer["chunks"])
-					{
-						TileChunk chunk;
-						chunk.x = chunkJson.value( "x", 0 );
-						chunk.y = chunkJson.value( "y", 0 );
-						chunk.width = chunkJson.value( "width", 0 );
-						chunk.height = chunkJson.value( "height", 0 );
-						chunk.data = chunkJson["data"].get<std::vector<int>>();
-						mapChunks.push_back( chunk );
-					}
+					chunk.data.push_back( tile->getId() );
 				}
-				else if (layer.contains( "data" ))
+				mapChunks.push_back( chunk );
+			}
+			// Chunked / Infinite map lagen
+			else
+			{
+				for (auto& chunkData : layer.getChunks())
 				{
 					TileChunk chunk;
-					chunk.x = 0;
-					chunk.y = 0;
-					chunk.width = mapJson.value( "width", 0 );
-					chunk.height = mapJson.value( "height", 0 );
-					chunk.data = layer["data"].get<std::vector<int>>();
+					chunk.x = chunkData.getPosition().x;
+					chunk.y = chunkData.getPosition().y;
+					chunk.width = chunkData.getSize().x;
+					chunk.height = chunkData.getSize().y;
+					
+					for (auto& tileId : chunkData.getData())
+					{
+						chunk.data.push_back( static_cast<int>( tileId & 0x0FFFFFFF ) );
+					}
 					mapChunks.push_back( chunk );
 				}
 			}
@@ -73,7 +82,6 @@ void Game::LoadTiledMap( const std::string& jsonPath )
 		tilesetCols = tileSetSurface->width / tileWidth;
 	}
 }
-
 void Game::BlitTile( int frameIndex, int dstX, int dstY )
 {
 	if (!tileSetSurface || tilesetCols <= 0) return;
@@ -114,7 +122,7 @@ void Game::Tick( float /* deltaTime */ )
 
 	if (!tileSetSurface || mapChunks.empty()) return;
 
-	int cameraX = 100;
+	int cameraX = 0;
 	int cameraY = 0;
 
 	for (const auto& chunk : mapChunks)
@@ -125,12 +133,15 @@ void Game::Tick( float /* deltaTime */ )
 			{
 				int tileIndex = cx + cy * chunk.width;
 
-				unsigned int rawTileId = (unsigned int)chunk.data[tileIndex];
-				unsigned int cleanTileId = rawTileId & 0x0FFFFFFF;
+				if (tileIndex >= chunk.data.size()) continue;
 
-				if (cleanTileId >= firstGid)
+				int tileId = chunk.data[tileIndex];
+
+				// Met Tileson is een ID van 0 leeg. 
+				// 1 is de allereerste tile op je tileset!
+				if (tileId > 0)
 				{
-					int frameIndex = cleanTileId - firstGid;
+					int frameIndex = tileId - 1; // 0-indexed voor je blitter
 
 					int worldTileX = chunk.x + cx;
 					int worldTileY = chunk.y + cy;
@@ -139,7 +150,7 @@ void Game::Tick( float /* deltaTime */ )
 					int scrY = (worldTileY * tileHeight) + cameraY;
 
 					if (scrX >= -tileWidth && scrX < SCRWIDTH &&
-					    scrY >= -tileHeight && scrY < SCRHEIGHT)
+						scrY >= -tileHeight && scrY < SCRHEIGHT)
 					{
 						BlitTile( frameIndex, scrX, scrY );
 					}
@@ -149,13 +160,9 @@ void Game::Tick( float /* deltaTime */ )
 	}
 }
 
-// -----------------------------------------------------------
-// Initialize the application
-// -----------------------------------------------------------
 void Game::Init()
 {
-	// Laad je JSON-kaart bij de start
-	LoadTiledMap( "../maps/test.json" );
+	LoadTiledMap( "../maps/test2.json" );
 }
 
 } // namespace Tmpl8
