@@ -68,11 +68,43 @@ void Game::LoadTiledMap( const std::string& jsonPath )
 	}
 
 	tileSetSurface = new Surface( "../assets/MetalSlugBackground.png" );
-	if (tileSetSurface->width > 0 && tileHeight > 0)
+	if (tileSetSurface->width > 0 && tileWidth > 0)
 	{
-		int tilesX = tileSetSurface->width / tileWidth;
-		int tilesY = tileSetSurface->height / tileHeight;
-		tileSetSprite = new Sprite( tileSetSurface, std::max( 1, tilesX * tilesY ) );
+		tilesetCols = tileSetSurface->width / tileWidth;
+	}
+}
+
+void Game::BlitTile( int frameIndex, int dstX, int dstY )
+{
+	if (!tileSetSurface || tilesetCols <= 0) return;
+	int tileCols = tilesetCols;
+	int tileRows = tileSetSurface->height / tileHeight;
+	int maxFrames = tileCols * tileRows;
+	if (frameIndex < 0 || frameIndex >= maxFrames) return;
+
+	int srcX = (frameIndex % tileCols) * tileWidth;
+	int srcY = (frameIndex / tileCols) * tileHeight;
+
+	uint* src = tileSetSurface->pixels + srcY * tileSetSurface->width + srcX;
+	uint* dst = screen->pixels + dstY * screen->width + dstX;
+
+	for (int y = 0; y < tileHeight; ++y)
+	{
+		int sy = srcY + y;
+		if (sy >= tileSetSurface->height) break;
+		int dy = dstY + y;
+		if (dy < 0 || dy >= screen->height) { src += tileSetSurface->width; continue; }
+
+		for (int x = 0; x < tileWidth; ++x)
+		{
+			int sx = srcX + x;
+			if (sx >= tileSetSurface->width) break;
+			int dx = dstX + x;
+			if (dx < 0 || dx >= screen->width) continue;
+
+			uint c = src[x];
+			if (c & 0xff000000) dst[dy * screen->width + dx] = c;
+		}
 	}
 }
 
@@ -80,14 +112,10 @@ void Game::Tick( float /* deltaTime */ )
 {
 	screen->Clear( 0x1e1e1e );
 
-	if (!tileSetSprite || mapChunks.empty()) return;
+	if (!tileSetSurface || mapChunks.empty()) return;
 
-	int maxFrames = (tileSetSurface->width / tileWidth) * (tileSetSurface->height / tileHeight);
-
-	// Als de map op negatieve of hoge coördinaten getekend is in Tiled, 
-	// kun je hiermee de camera verschuiven (bijv. 200px naar rechts/beneden offsetten):
-	int cameraX = 0; 
-	int cameraY = 0; 
+	int cameraX = 100;
+	int cameraY = 0;
 
 	for (const auto& chunk : mapChunks)
 	{
@@ -102,24 +130,18 @@ void Game::Tick( float /* deltaTime */ )
 
 				if (cleanTileId >= firstGid)
 				{
-					// Converteer GID naar Sprite frame-index
 					int frameIndex = cleanTileId - firstGid;
 
-					if (frameIndex < maxFrames)
+					int worldTileX = chunk.x + cx;
+					int worldTileY = chunk.y + cy;
+
+					int scrX = (worldTileX * tileWidth) + cameraX;
+					int scrY = (worldTileY * tileHeight) + cameraY;
+
+					if (scrX >= -tileWidth && scrX < SCRWIDTH &&
+					    scrY >= -tileHeight && scrY < SCRHEIGHT)
 					{
-						int worldTileX = chunk.x + cx;
-						int worldTileY = chunk.y + cy;
-
-						int screenX = (worldTileX * tileWidth) + cameraX;
-						int screenY = (worldTileY * tileHeight) + cameraY;
-
-						// Teken alleen als de tile binnen het zichtbare scherm valt
-						if (screenX >= -tileWidth && screenX < SCRWIDTH &&
-						    screenY >= -tileHeight && screenY < SCRHEIGHT)
-						{
-							tileSetSprite->SetFrame( frameIndex );
-							tileSetSprite->Draw( screen, screenX, screenY );
-						}
+						BlitTile( frameIndex, scrX, scrY );
 					}
 				}
 			}

@@ -26,7 +26,8 @@ public:
 	// game flow methods
 	void Init();
 	void Tick( float deltaTime );
-	void Shutdown() { delete tileSetSprite; delete tileSetSurface; }
+	void Shutdown() { delete tileSetSurface; }
+	void BlitTile( int frameIndex, int dstX, int dstY );
 	
 	// input handling
 	void MouseUp( int ) { /* implement if you want to detect mouse button presses */ }
@@ -50,9 +51,9 @@ private:
 	int tileHeight = 0;
   int firstGid = 1;
   std::vector<TileChunk> mapChunks;
-	// Spritesheet rendering
+	// Tileset rendering
 	Surface* tileSetSurface = nullptr;
-	Sprite* tileSetSprite = nullptr;
+	int tilesetCols = 0;
 };
 
 } // namespace Tmpl8
