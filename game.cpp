@@ -49,9 +49,11 @@ void Game::LoadTiledMap( const std::string& jsonPath )
 				chunk.height = layer.getSize().y;
 
 				// Verkrijg alle tile IDs
+				// Inside layer.getChunks().empty() loop:
 				for (auto& [pos, tile] : layer.getTileData())
 				{
-					chunk.data.push_back( tile->getId() );
+					// Clean flip flags (0x0FFFFFFF strips Tiled's rotation/flip bits)
+					chunk.data.push_back(tile->getId() & 0x0FFFFFFF);
 				}
 				mapChunks.push_back( chunk );
 			}
@@ -82,7 +84,7 @@ void Game::LoadTiledMap( const std::string& jsonPath )
 		tilesetCols = tileSetSurface->width / tileWidth;
 	}
 }
-void Game::BlitTile( int frameIndex, int dstX, int dstY )
+void Game::BlitTile(int frameIndex, int dstX, int dstY)
 {
 	if (!tileSetSurface || tilesetCols <= 0) return;
 	int tileCols = tilesetCols;
@@ -93,15 +95,14 @@ void Game::BlitTile( int frameIndex, int dstX, int dstY )
 	int srcX = (frameIndex % tileCols) * tileWidth;
 	int srcY = (frameIndex / tileCols) * tileHeight;
 
-	uint* src = tileSetSurface->pixels + srcY * tileSetSurface->width + srcX;
-	uint* dst = screen->pixels + dstY * screen->width + dstX;
+	uint* dst = screen->pixels;
 
 	for (int y = 0; y < tileHeight; ++y)
 	{
 		int sy = srcY + y;
 		if (sy >= tileSetSurface->height) break;
 		int dy = dstY + y;
-		if (dy < 0 || dy >= screen->height) { src += tileSetSurface->width; continue; }
+		if (dy < 0 || dy >= screen->height) continue;
 
 		for (int x = 0; x < tileWidth; ++x)
 		{
@@ -110,8 +111,13 @@ void Game::BlitTile( int frameIndex, int dstX, int dstY )
 			int dx = dstX + x;
 			if (dx < 0 || dx >= screen->width) continue;
 
-			uint c = src[x];
-			if (c & 0xff000000) dst[dy * screen->width + dx] = c;
+			uint c = tileSetSurface->pixels[sy * tileSetSurface->width + sx];
+
+			// If fully black/transparent engine buffer, force full opacity alpha bit for display
+			if ((c & 0xFFFFFF) != 0)
+			{
+				dst[dy * screen->width + dx] = c | 0xFF000000;
+			}
 		}
 	}
 }
@@ -123,7 +129,7 @@ void Game::Tick( float /* deltaTime */ )
 	if (!tileSetSurface || mapChunks.empty()) return;
 
 	int cameraX = 0;
-	int cameraY = 0;
+	int cameraY = -300;
 
 	for (const auto& chunk : mapChunks)
 	{

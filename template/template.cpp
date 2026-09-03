@@ -13,8 +13,8 @@
 
 #include "unix_shims.h"
 #ifndef __WIN32
-#include <pthread.h>
-#include <sched.h>
+//#include <pthread.h>
+//#include <sched.h>
 #endif
 
 using namespace Tmpl8;
