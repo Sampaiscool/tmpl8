@@ -16,159 +16,200 @@
 namespace Tmpl8
 {
 
-void Game::LoadTiledMap( const std::string& jsonPath )
-{
-  tson::Tileson t;
-	
-	// Parse het bestand
-	std::unique_ptr<tson::Map> parsedMap = t.parse( std::filesystem::path( jsonPath ) );
+    void Game::LoadTiledMap(const std::string& jsonPath)
+    {
+        tson::Tileson t;
+        std::unique_ptr<tson::Map> parsedMap = t.parse(std::filesystem::path(jsonPath));
 
-	if (!parsedMap || parsedMap->getStatus() != tson::ParseStatus::OK)
-	{
-		std::cout << "Tileson kon de map niet laden of het is geen geldige JSON: " << jsonPath << std::endl;
-		return;
-	}
+        if (!parsedMap || parsedMap->getStatus() != tson::ParseStatus::OK)
+        {
+            std::cout << "Tileson failed to parse map JSON: " << jsonPath << std::endl;
+            return;
+        }
 
-	tileWidth = parsedMap->getTileSize().x;
-	tileHeight = parsedMap->getTileSize().y;
+        tileWidth = parsedMap->getTileSize().x;
+        tileHeight = parsedMap->getTileSize().y;
+        mapChunks.clear();
 
-	mapChunks.clear();
+        // 1. Clean up old tilesets if re-loading
+        for (auto& ts : loadedTilesets)
+        {
+            delete ts.surface;
+        }
+        loadedTilesets.clear();
 
-	// Loop door alle lagen
-	for (auto& layer : parsedMap->getLayers())
-	{
-		if (layer.getType() == tson::LayerType::TileLayer)
-		{
-			// Unchunked / Normale lagen
-			if (layer.getChunks().empty())
-			{
-				TileChunk chunk;
-				chunk.x = 0;
-				chunk.y = 0;
-				chunk.width = layer.getSize().x;
-				chunk.height = layer.getSize().y;
+        // 2. Load every tileset dynamically from the JSON
+        for (auto& ts : parsedMap->getTilesets())
+        {
+            LoadedTileset lts;
+            lts.firstGid = ts.getFirstgid();
 
-				// Verkrijg alle tile IDs
-				// Inside layer.getChunks().empty() loop:
-				for (auto& [pos, tile] : layer.getTileData())
-				{
-					// Clean flip flags (0x0FFFFFFF strips Tiled's rotation/flip bits)
-					chunk.data.push_back(tile->getId() & 0x0FFFFFFF);
-				}
-				mapChunks.push_back( chunk );
-			}
-			// Chunked / Infinite map lagen
-			else
-			{
-				for (auto& chunkData : layer.getChunks())
-				{
-					TileChunk chunk;
-					chunk.x = chunkData.getPosition().x;
-					chunk.y = chunkData.getPosition().y;
-					chunk.width = chunkData.getSize().x;
-					chunk.height = chunkData.getSize().y;
-					
-					for (auto& tileId : chunkData.getData())
-					{
-						chunk.data.push_back( static_cast<int>( tileId & 0x0FFFFFFF ) );
-					}
-					mapChunks.push_back( chunk );
-				}
-			}
-		}
-	}
+            // 1. Haal de raw path string op uit Tileson
+            std::string rawPath = ts.getImagePath().string();
 
-	tileSetSurface = new Surface( "../assets/MetalSlugBackground.png" );
-	if (tileSetSurface->width > 0 && tileWidth > 0)
-	{
-		tilesetCols = tileSetSurface->width / tileWidth;
-	}
-}
-void Game::BlitTile(int frameIndex, int dstX, int dstY)
-{
-	if (!tileSetSurface || tilesetCols <= 0) return;
-	int tileCols = tilesetCols;
-	int tileRows = tileSetSurface->height / tileHeight;
-	int maxFrames = tileCols * tileRows;
-	if (frameIndex < 0 || frameIndex >= maxFrames) return;
+            // 2. Strip evt. quotes of paden, pak alleen de losse filename
+            std::filesystem::path p(rawPath);
+            std::string filename = p.filename().string();
 
-	int srcX = (frameIndex % tileCols) * tileWidth;
-	int srcY = (frameIndex / tileCols) * tileHeight;
+            // 3. Bouw het schone pad
+            std::string imagePath = "maps/assets/" + filename;
 
-	uint* dst = screen->pixels;
+            std::cout << "Loading tileset: [" << imagePath << "]" << std::endl;
 
-	for (int y = 0; y < tileHeight; ++y)
-	{
-		int sy = srcY + y;
-		if (sy >= tileSetSurface->height) break;
-		int dy = dstY + y;
-		if (dy < 0 || dy >= screen->height) continue;
+            lts.surface = new Surface(imagePath.c_str());
 
-		for (int x = 0; x < tileWidth; ++x)
-		{
-			int sx = srcX + x;
-			if (sx >= tileSetSurface->width) break;
-			int dx = dstX + x;
-			if (dx < 0 || dx >= screen->width) continue;
+            if (!lts.surface || lts.surface->width == 0)
+            {
+                std::cout << "ERROR: Failed to load surface at " << imagePath << std::endl;
+            }
 
-			uint c = tileSetSurface->pixels[sy * tileSetSurface->width + sx];
+            loadedTilesets.push_back(lts);
+        }
 
-			// If fully black/transparent engine buffer, force full opacity alpha bit for display
-			if ((c & 0xFFFFFF) != 0)
-			{
-				dst[dy * screen->width + dx] = c | 0xFF000000;
-			}
-		}
-	}
-}
+        // 3. Load chunk and layer data
+        for (auto& layer : parsedMap->getLayers())
+        {
+            if (layer.getType() == tson::LayerType::TileLayer)
+            {
+                if (layer.getChunks().empty())
+                {
+                    TileChunk chunk;
+                    chunk.x = 0;
+                    chunk.y = 0;
+                    chunk.width = layer.getSize().x;
+                    chunk.height = layer.getSize().y;
 
-void Game::Tick( float /* deltaTime */ )
-{
-	screen->Clear( 0x1e1e1e );
+                    for (auto& tileId : layer.getData())
+                    {
+                        chunk.data.push_back(tileId & 0x0FFFFFFF);
+                    }
+                    mapChunks.push_back(chunk);
+                }
+                else
+                {
+                    for (auto& chunkData : layer.getChunks())
+                    {
+                        TileChunk chunk;
+                        chunk.x = chunkData.getPosition().x;
+                        chunk.y = chunkData.getPosition().y;
+                        chunk.width = chunkData.getSize().x;
+                        chunk.height = chunkData.getSize().y;
 
-	if (!tileSetSurface || mapChunks.empty()) return;
+                        for (auto& tileId : chunkData.getData())
+                        {
+                            chunk.data.push_back(static_cast<int>(tileId & 0x0FFFFFFF));
+                        }
+                        mapChunks.push_back(chunk);
+                    }
+                }
+            }
+        }
+    }
 
-	int cameraX = 0;
-	int cameraY = -300;
+    void Game::BlitTile(Surface* targetSurface, int frameIndex, int dstX, int dstY)
+    {
+        if (!targetSurface || tileWidth <= 0) return;
 
-	for (const auto& chunk : mapChunks)
-	{
-		for (int cy = 0; cy < chunk.height; ++cy)
-		{
-			for (int cx = 0; cx < chunk.width; ++cx)
-			{
-				int tileIndex = cx + cy * chunk.width;
+        int tileCols = targetSurface->width / tileWidth;
+        if (tileCols <= 0) return;
 
-				if (tileIndex >= chunk.data.size()) continue;
+        int tileRows = targetSurface->height / tileHeight;
+        int maxFrames = tileCols * tileRows;
 
-				int tileId = chunk.data[tileIndex];
+        if (frameIndex < 0 || frameIndex >= maxFrames) return;
 
-				// Met Tileson is een ID van 0 leeg. 
-				// 1 is de allereerste tile op je tileset!
-				if (tileId > 0)
-				{
-					int frameIndex = tileId - 1; // 0-indexed voor je blitter
+        int srcX = (frameIndex % tileCols) * tileWidth;
+        int srcY = (frameIndex / tileCols) * tileHeight;
 
-					int worldTileX = chunk.x + cx;
-					int worldTileY = chunk.y + cy;
+        uint* dst = screen->pixels;
 
-					int scrX = (worldTileX * tileWidth) + cameraX;
-					int scrY = (worldTileY * tileHeight) + cameraY;
+        for (int y = 0; y < tileHeight; ++y)
+        {
+            int sy = srcY + y;
+            if (sy >= targetSurface->height) break;
+            int dy = dstY + y;
+            if (dy < 0 || dy >= screen->height) continue;
 
-					if (scrX >= -tileWidth && scrX < SCRWIDTH &&
-						scrY >= -tileHeight && scrY < SCRHEIGHT)
-					{
-						BlitTile( frameIndex, scrX, scrY );
-					}
-				}
-			}
-		}
-	}
-}
+            for (int x = 0; x < tileWidth; ++x)
+            {
+                int sx = srcX + x;
+                if (sx >= targetSurface->width) break;
+                int dx = dstX + x;
+                if (dx < 0 || dx >= screen->width) continue;
 
-void Game::Init()
-{
-	LoadTiledMap( "../maps/test2.json" );
-}
+                uint c = targetSurface->pixels[sy * targetSurface->width + sx];
+
+                // Render non-transparent pixels with solid alpha bit set
+                if ((c & 0xFFFFFF) != 0)
+                {
+                    dst[dy * screen->width + dx] = c | 0xFF000000;
+                }
+            }
+        }
+    }
+
+    void Game::Tick(float /* deltaTime */)
+    {
+        screen->Clear(0x1e1e1e);
+
+        if (loadedTilesets.empty() || mapChunks.empty()) return;
+
+        int cameraX = -200;
+        int cameraY = 0;
+
+        for (const auto& chunk : mapChunks)
+        {
+            for (int cy = 0; cy < chunk.height; ++cy)
+            {
+                for (int cx = 0; cx < chunk.width; ++cx)
+                {
+                    int tileIndex = cx + cy * chunk.width;
+                    if (tileIndex >= chunk.data.size()) continue;
+
+                    int tileId = chunk.data[tileIndex];
+
+                    if (tileId > 0)
+                    {
+                        // Match tileId to the highest matching firstGid
+                        LoadedTileset* bestTileset = nullptr;
+                        for (auto& ts : loadedTilesets)
+                        {
+                            if (tileId >= ts.firstGid)
+                            {
+                                if (!bestTileset || ts.firstGid > bestTileset->firstGid)
+                                {
+                                    bestTileset = &ts;
+                                }
+                            }
+                        }
+
+                        if (bestTileset && bestTileset->surface)
+                        {
+                            int frameIndex = tileId - bestTileset->firstGid;
+
+                            int worldTileX = chunk.x + cx;
+                            int worldTileY = chunk.y + cy;
+
+                            int scrX = (worldTileX * tileWidth) + cameraX;
+                            int scrY = (worldTileY * tileHeight) + cameraY;
+
+                            if (scrX >= -tileWidth && scrX < SCRWIDTH &&
+                                scrY >= -tileHeight && scrY < SCRHEIGHT)
+                            {
+                                BlitTile(bestTileset->surface, frameIndex, scrX, scrY);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void Game::Init()
+    {
+        LoadTiledMap("maps/superslug.json");
+
+        
+    }
 
 } // namespace Tmpl8
