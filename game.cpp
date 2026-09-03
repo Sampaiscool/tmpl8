@@ -6,7 +6,6 @@
 #include "game.h"
 #include <iostream>
 
-// --- FIX FOR X11 MACRO CONFLICT ---
 #ifdef None
 #undef None
 #endif
@@ -29,29 +28,30 @@ namespace Tmpl8
 
         tileWidth = parsedMap->getTileSize().x;
         tileHeight = parsedMap->getTileSize().y;
+
         mapChunks.clear();
 
         // 1. Clean up old tilesets if re-loading
-        for (auto& ts : loadedTilesets)
+        for (LoadedTileset& ts : loadedTilesets)
         {
             delete ts.surface;
         }
         loadedTilesets.clear();
 
         // 2. Load every tileset dynamically from the JSON
-        for (auto& ts : parsedMap->getTilesets())
+        for (tson::Tileset& ts : parsedMap->getTilesets())
         {
             LoadedTileset lts;
             lts.firstGid = ts.getFirstgid();
 
-            // 1. Haal de raw path string op uit Tileson
+            // 1. Get raw path string from Tileson
             std::string rawPath = ts.getImagePath().string();
 
-            // 2. Strip evt. quotes of paden, pak alleen de losse filename
+            // 2. Strip paths/quotes to isolate filename
             std::filesystem::path p(rawPath);
             std::string filename = p.filename().string();
 
-            // 3. Bouw het schone pad
+            // 3. Build target relative path
             std::string imagePath = "maps/assets/" + filename;
 
             std::cout << "Loading tileset: [" << imagePath << "]" << std::endl;
@@ -67,7 +67,7 @@ namespace Tmpl8
         }
 
         // 3. Load chunk and layer data
-        for (auto& layer : parsedMap->getLayers())
+        for (tson::Layer& layer : parsedMap->getLayers())
         {
             if (layer.getType() == tson::LayerType::TileLayer)
             {
@@ -79,7 +79,7 @@ namespace Tmpl8
                     chunk.width = layer.getSize().x;
                     chunk.height = layer.getSize().y;
 
-                    for (auto& tileId : layer.getData())
+                    for (const uint32_t& tileId : layer.getData())
                     {
                         chunk.data.push_back(tileId & 0x0FFFFFFF);
                     }
@@ -87,7 +87,7 @@ namespace Tmpl8
                 }
                 else
                 {
-                    for (auto& chunkData : layer.getChunks())
+                    for (tson::Chunk& chunkData : layer.getChunks())
                     {
                         TileChunk chunk;
                         chunk.x = chunkData.getPosition().x;
@@ -95,7 +95,7 @@ namespace Tmpl8
                         chunk.width = chunkData.getSize().x;
                         chunk.height = chunkData.getSize().y;
 
-                        for (auto& tileId : chunkData.getData())
+                        for (const uint32_t& tileId : chunkData.getData())
                         {
                             chunk.data.push_back(static_cast<int>(tileId & 0x0FFFFFFF));
                         }
@@ -154,10 +154,10 @@ namespace Tmpl8
 
         if (loadedTilesets.empty() || mapChunks.empty()) return;
 
-        int cameraX = -200;
-        int cameraY = 0;
+        int cameraX = -1000;
+        int cameraY = 500;
 
-        for (const auto& chunk : mapChunks)
+        for (const TileChunk& chunk : mapChunks)
         {
             for (int cy = 0; cy < chunk.height; ++cy)
             {
@@ -172,7 +172,7 @@ namespace Tmpl8
                     {
                         // Match tileId to the highest matching firstGid
                         LoadedTileset* bestTileset = nullptr;
-                        for (auto& ts : loadedTilesets)
+                        for (LoadedTileset& ts : loadedTilesets)
                         {
                             if (tileId >= ts.firstGid)
                             {
@@ -208,8 +208,6 @@ namespace Tmpl8
     void Game::Init()
     {
         LoadTiledMap("maps/superslug.json");
-
-        
     }
 
 } // namespace Tmpl8
