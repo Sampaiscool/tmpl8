@@ -65,3 +65,9 @@ else()
         -mavx2
     )
 endif()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(myGame PRIVATE
+        -w # removes all warnings (noob warnings)
+    )
+endif()

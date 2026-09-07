@@ -4,22 +4,21 @@
 
 #pragma once
 
-#include <vector>
-#include <string>
+#include "list.h"
 
 namespace Tmpl8
 {
-
-    struct TileChunk {
+    struct TileChunk 
+    {
         int x = 0;          // Tile offset X
         int y = 0;          // Tile offset Y
         int width = 0;      // Chunk breedte in tiles
         int height = 0;     // Chunk hoogte in tiles
-        std::vector<int> data;
+        List<int> data;     // Onze eigen List i.p.v. std::vector<int>
     };
 
-    // Container to pair loaded tileset textures with their Tiled GID offsets
-    struct LoadedTileset {
+    struct LoadedTileset 
+    {
         int firstGid = 1;
         Surface* surface = nullptr;
     };
@@ -27,46 +26,42 @@ namespace Tmpl8
     class Game : public TheApp
     {
     public:
-        // game flow methods
         void Init();
         void Tick(float deltaTime);
         void Shutdown()
         {
-            for (auto& ts : loadedTilesets)
+            for (int i = 0; i < loadedTilesets.size(); ++i)
             {
-                delete ts.surface;
+                delete loadedTilesets[i].surface;
             }
             loadedTilesets.clear();
         }
 
-        // Pass target surface pointer directly to handle multiple tilesets
         void BlitTile(Surface* targetSurface, int frameIndex, int dstX, int dstY);
 
-        // input handling
-        void MouseUp(int) { /* implement if you want to detect mouse button presses */ }
-        void MouseDown(int) { /* implement if you want to detect mouse button presses */ }
-        void MouseMove(int x, int y) { mousePos.x = x, mousePos.y = y; }
-        void MouseWheel(float) { /* implement if you want to handle the mouse wheel */ }
-        void KeyUp(int) { /* implement if you want to handle keys */ }
-        void KeyDown(int) { /* implement if you want to handle keys */ }
+        void MouseUp(int) {}
+        void MouseDown(int) {}
+        void MouseMove(int x, int y) { mousePos.x = x; mousePos.y = y; }
+        void MouseWheel(float) {}
+        void KeyUp(int key) { keys[key & 511] = true; }
+        void KeyDown(int key) { keys[key & 511] = false; }
 
-        // Tiled Loader helper
-        void LoadTiledMap(const std::string& jsonPath);
+        void LoadTiledMap(const char* jsonPath);
 
-        // data members
         int2 mousePos;
 
     private:
-        // Map Properties
         int mapWidth = 0;
         int mapHeight = 0;
         int tileWidth = 0;
         int tileHeight = 0;
+        float cameraX = 0.0f;
+        float cameraY = 0.0f;
 
-        std::vector<TileChunk> mapChunks;
+        bool keys[512] = { false };
 
-        // Multi-tileset container
-        std::vector<LoadedTileset> loadedTilesets;
+        List<TileChunk> mapChunks;
+        List<LoadedTileset> loadedTilesets;
     };
 
 } // namespace Tmpl8
