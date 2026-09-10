@@ -18,7 +18,7 @@ namespace Tmpl8
     {
         /*
         This code:
-        initializes the Tileson parser to process the JSON file.
+        initializes the Ttileson parser to process the JSON file.
         It parses the raw file and builds a complex data tree on top of the
         heap. Instead of returning a raw pointer (*) it uses a unique_ptr, this way
         you dont have to keep track of it with delete and all that stuff.
@@ -56,7 +56,7 @@ namespace Tmpl8
         Otherwise, we would leave allocations on the heap that no longer
         have active pointers, wich is a waste of memory.
 
-        The FOR loop iterates over our custom 'loadedTilesets' container. For
+        The for loop iterates over our custom 'loadedTilesets' container. For
         each 'LoadedTileset' (lts), we delete its allocated surface image
         and clear the container.
 
@@ -128,7 +128,7 @@ namespace Tmpl8
         mask: (data & 0x0FFFFFFF). This turns the upper 4 flag bits to 0,
         leaving us with the pure id needed for mapping.
 
-        Notice that we read directly from layer.getData()[d] or chunkData.getData()[d]
+        wwe read directly from layer.getData()[d] or chunkData.getData()[d]
         and push it into our custom List<int> container, preventing any external
         std::vector dynamic alloocations inside our game logic
         */
@@ -184,7 +184,7 @@ namespace Tmpl8
     /*
     This code:
     2D pixels are stored sequentially in RAM as a 1D array
-    (row by row). We use standard (the one we talked about) 2D-to-1D index offset formulas:
+    (row by row). We use standard 2D-to-1D index offset formulas:
     Index = Y * Width + X
 
     Boundary Protection & Clipping:
@@ -240,7 +240,7 @@ namespace Tmpl8
                 // Skip black/transparent background pixels
                 if ((c & 0xFFFFFF) != 0)
                 {
-                    // Force alpha to 255 (0xFF) so the pixel is fully opaque
+                    // Force alpha to 255 (0xFF) so the pixel is fully invisible
                     dst[dy * screen->width + dx] = c | 0xFF000000;
                 }
             }
@@ -264,17 +264,19 @@ namespace Tmpl8
         float dt = (deltaTime > 1.0f) ? (deltaTime / 1000.0f) : deltaTime;
         if (dt > 0.05f) dt = 0.05f;
 
-        const float speed = 400.0f;
+        // 1. Update Player movement and animation using input keys
+        if (player)
+        {
+            player->Update(dt, keys);
 
-        // Camera controls via array lookup
-        if (keys['a'] || keys['A'] || keys[GLFW_KEY_LEFT])  cameraX -= speed * dt;
-        if (keys['d'] || keys['D'] || keys[GLFW_KEY_RIGHT]) cameraX += speed * dt;
-        if (keys['w'] || keys['W'] || keys[GLFW_KEY_UP])    cameraY -= speed * dt;
-        if (keys['s'] || keys['S'] || keys[GLFW_KEY_DOWN])  cameraY += speed * dt;
+            // 2. Center Camera on Player (assuming 800x512 screen size, adjust if needed)
+            cameraX = (SCRWIDTH * 0.5f) - player->GetX();
+            cameraY = (SCRHEIGHT * 0.5f) - player->GetY();
+        }
 
         if (loadedTilesets.empty() || mapChunks.empty()) return;
 
-        // Loop through chunks using custom List index iteration
+        // 3. Render Tilemap Background (using updated camera position)
         for (int c = 0; c < mapChunks.size(); ++c)
         {
             const TileChunk& chunk = mapChunks[c];
@@ -283,18 +285,15 @@ namespace Tmpl8
             {
                 for (int cx = 0; cx < chunk.width; ++cx)
                 {
-                    // Convert 2D tile position inside chunk to 1D List index
                     int tileIndex = cx + cy * chunk.width;
                     if (tileIndex >= chunk.data.size()) continue;
 
                     int tileId = chunk.data[tileIndex];
 
-                    // Skip empty tile slots
                     if (tileId > 0)
                     {
                         LoadedTileset* bestTileset = nullptr;
 
-                        // Find which tileset image owns this specific tileId
                         for (int t = 0; t < loadedTilesets.size(); ++t)
                         {
                             LoadedTileset& ts = loadedTilesets[t];
@@ -309,17 +308,14 @@ namespace Tmpl8
 
                         if (bestTileset && bestTileset->surface)
                         {
-                            // Calculate local frame index inside the matched tileset
                             int frameIndex = tileId - bestTileset->firstGid;
 
-                            // Calculate final screen position factoring in camera
                             int worldTileX = chunk.x + cx;
                             int worldTileY = chunk.y + cy;
 
                             int scrX = static_cast<int>((worldTileX * tileWidth) + cameraX);
                             int scrY = static_cast<int>((worldTileY * tileHeight) + cameraY);
 
-                            // Frustum culling: render only tiles visible on screen
                             if (scrX >= -tileWidth && scrX < SCRWIDTH &&
                                 scrY >= -tileHeight && scrY < SCRHEIGHT)
                             {
@@ -330,11 +326,20 @@ namespace Tmpl8
                 }
             }
         }
+
+        // 4. Render Player on top of the tilemap
+        if (player)
+        {
+            player->Draw(screen, cameraX, cameraY);
+        }
     }
 
     void Game::Init()
     {
         LoadTiledMap("../maps/superslug.json");
+
+        player = new Player();
+        player->SetPosition(0.0f, 83.0f); // Set starting world position
 
         cameraX = 0.0f;
         cameraY = 0.0f;

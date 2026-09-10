@@ -5,6 +5,7 @@
 #pragma once
 
 #include "list.h"
+#include "player.h"
 
 namespace Tmpl8
 {
@@ -62,6 +63,8 @@ namespace Tmpl8
 
         List<TileChunk> mapChunks;
         List<LoadedTileset> loadedTilesets;
+
+        Player* player = nullptr;
     };
 
 } // namespace Tmpl8

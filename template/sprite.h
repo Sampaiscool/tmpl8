@@ -24,6 +24,7 @@ public:
 	int GetHeight() { return height; }
 	uint* GetBuffer() { return surface->pixels; }
 	unsigned int Frames() { return numFrames; }
+  unsigned int GetFrameCount() const { return numFrames; }
 	Surface* GetSurface() { return surface; }
 	void InitializeStartData();
 private:

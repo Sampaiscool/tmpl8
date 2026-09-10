@@ -16,6 +16,7 @@ add_executable(myGame
     template/surface.cpp
     template/template.cpp
     template/tmpl8math.cpp
+    player.cpp
 )
 
 set_target_properties(myGame PROPERTIES DEBUG_POSTFIX _debug)
