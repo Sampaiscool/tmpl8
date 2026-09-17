@@ -23,6 +23,16 @@
     <ClCompile Include="template\scene.cpp">
       <Filter>template</Filter>
     </ClCompile>
+    <ClCompile Include="player.cpp" />
+    <ClCompile Include="managers\animationManager.cpp">
+      <Filter>managers</Filter>
+    </ClCompile>
+    <ClCompile Include="managers\missionManager.cpp">
+      <Filter>managers</Filter>
+    </ClCompile>
+    <ClCompile Include="managers\renderManager.cpp">
+      <Filter>managers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="game.h" />
@@ -59,6 +69,17 @@
     <ClInclude Include="template\scene.h">
       <Filter>template</Filter>
     </ClInclude>
+    <ClInclude Include="player.h" />
+    <ClInclude Include="managers\animationManager.h">
+      <Filter>managers</Filter>
+    </ClInclude>
+    <ClInclude Include="managers\missionManager.h">
+      <Filter>managers</Filter>
+    </ClInclude>
+    <ClInclude Include="managers\renderManager.h">
+      <Filter>managers</Filter>
+    </ClInclude>
+    <ClInclude Include="list.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md">
@@ -78,5 +99,22 @@
     <Filter Include="kernels">
       <UniqueIdentifier>{96ad1716-f468-46c6-8f16-5accbc19d76c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="managers">
+      <UniqueIdentifier>{48889f30-8762-42ea-97ec-3d9323b4c31d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="assets">
+      <UniqueIdentifier>{e3c2ad8b-ebb6-47d6-9d54-c33d707b5204}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="assets\Marco">
+      <UniqueIdentifier>{4773ab76-3932-4bd7-93d2-b2355aa1b1c7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\Marco\runMarco_merged.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\Marco\Marco_merged.png">
+      <Filter>assets</Filter>
+    </Image>
   </ItemGroup>
 </Project>

@@ -122,6 +122,10 @@
   <!-- END Custom section -->
   <ItemGroup>
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="managers\animationManager.cpp" />
+    <ClCompile Include="managers\missionManager.cpp" />
+    <ClCompile Include="managers\renderManager.cpp" />
+    <ClCompile Include="player.cpp" />
     <ClCompile Include="template\opencl.cpp" />
     <ClCompile Include="template\opengl.cpp" />
     <ClCompile Include="template\scene.cpp">
@@ -141,6 +145,11 @@
   <ItemGroup>
     <ClInclude Include="cl\tools.cl" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="list.h" />
+    <ClInclude Include="managers\animationManager.h" />
+    <ClInclude Include="managers\missionManager.h" />
+    <ClInclude Include="managers\renderManager.h" />
+    <ClInclude Include="player.h" />
     <ClInclude Include="template\common.h" />
     <ClInclude Include="template\opencl.h" />
     <ClInclude Include="template\opengl.h" />
@@ -156,6 +165,10 @@
     <None Include="cl\kernels.cl" />
     <None Include="README.md" />
     <None Include="template\LICENSE" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\Marco\Marco_merged.png" />
+    <Image Include="assets\Marco\runMarco_merged.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

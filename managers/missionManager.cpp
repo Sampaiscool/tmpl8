@@ -125,7 +125,12 @@ namespace Tmpl8
             std::string filename = imagePath.filename().string();
 
             char localPath[256];
-            snprintf(localPath, sizeof(localPath), "../maps/assets/%s", filename.c_str());
+
+            #if defined(_WIN32)
+                snprintf(localPath, sizeof(localPath), "maps/assets/%s", filename.c_str());
+            #elif defined(__linux__)
+                snprintf(localPath, sizeof(localPath), "../maps/assets/%s", filename.c_str());
+            #endif
 
             loaded.surface = new Surface(localPath);
 

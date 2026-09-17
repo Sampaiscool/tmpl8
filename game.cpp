@@ -26,7 +26,16 @@ namespace Tmpl8
         defaults and we still get a window with the player in it instead of a
         crash.
         */
-        if (mission.Load("../maps/superslug.json"))
+
+        const char* jsonName = "something went wrong with the json name";
+
+        #if defined(_WIN32)
+            jsonName = "maps/superslug.json";
+        #elif defined(__linux__)
+            jsonName = "../maps/superslug.json";
+        #endif
+
+        if (mission.Load(jsonName))
         {
             renderer.SetupZoom(mission.GetTileWidth());
         }

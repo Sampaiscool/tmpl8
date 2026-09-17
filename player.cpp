@@ -18,8 +18,13 @@ namespace Tmpl8
     */
     Player::Player()
     {
-        idleClip = animations.AddClip("../assets/Marco/Marco_merged.png", 4, 0.10f);
-        runClip = animations.AddClip("../assets/Marco/runMarco_merged.png", 6, 0.10f);
+        #if defined(_WIN32)
+            idleClip = animations.AddClip("assets/Marco/Marco_merged.png", 4, 0.10f);
+            runClip = animations.AddClip("assets/Marco/runMarco_merged.png", 6, 0.10f);
+        #elif defined(__linux__)
+            idleClip = animations.AddClip("../assets/Marco/Marco_merged.png", 4, 0.10f);
+            runClip = animations.AddClip("../assets/Marco/runMarco_merged.png", 6, 0.10f);
+        #endif
     }
 
     /*
