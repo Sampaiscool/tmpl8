@@ -4,67 +4,61 @@
 
 #pragma once
 
-#include "list.h"
+#include "managers/missionManager.h"
+#include "managers/renderManager.h"
 #include "player.h"
 
 namespace Tmpl8
 {
-    struct TileChunk 
-    {
-        int x = 0;          // Tile offset X
-        int y = 0;          // Tile offset Y
-        int width = 0;      // Chunk breedte in tiles
-        int height = 0;     // Chunk hoogte in tiles
-        List<int> data;     // Onze eigen List i.p.v. std::vector<int>
-    };
+    /*
+    This code:
+    Game is the glue, nothing more. It owns the managers, forwards input into
+    them and decides the order things happen in each frame. Every actual job
+    lives in one manager:
 
-    struct LoadedTileset 
-    {
-        int firstGid = 1;
-        Surface* surface = nullptr;
-    };
+    MissionManager   - parses the Tiled JSON, owns the tile data and the
+                       tileset images, draws the level.
+    RenderManager    - owns the zoom and the camera and does all the pixel
+                       writing, for tiles and sprites alike.
+    AnimationManager - owned by the Player, owns the spritesheets and runs
+                       the frame timers.
 
+    Everything the managers took over used to sit in this class: the tile
+    structs, the tileset list, the zoom fields, the camera, the blitter and
+    the whole map parser. The zoom setting itself (TILES_ON_SCREEN) moved to
+    renderManager.h, because that is what reads it.
+    */
     class Game : public TheApp
     {
     public:
         void Init();
         void Tick(float deltaTime);
-        void Shutdown()
-        {
-            for (int i = 0; i < loadedTilesets.size(); ++i)
-            {
-                delete loadedTilesets[i].surface;
-            }
-            loadedTilesets.clear();
-        }
-
-        void BlitTile(Surface* targetSurface, int frameIndex, int dstX, int dstY);
+        void Shutdown();
 
         void MouseUp(int) {}
         void MouseDown(int) {}
         void MouseMove(int x, int y) { mousePos.x = x; mousePos.y = y; }
         void MouseWheel(float) {}
-        void KeyUp(int key) { keys[key & 511] = true; }
-        void KeyDown(int key) { keys[key & 511] = false; }
-
-        void LoadTiledMap(const char* jsonPath);
+        // Key released -> mark it as not held. Key pressed -> mark it as held.
+        // The '& 511' keeps the index inside the array no matter what code GLFW sends.
+        void KeyUp(int key) { keys[key & 511] = false; }
+        void KeyDown(int key) { keys[key & 511] = true; }
 
         int2 mousePos;
 
     private:
-        int mapWidth = 0;
-        int mapHeight = 0;
-        int tileWidth = 0;
-        int tileHeight = 0;
-        float cameraX = 0.0f;
-        float cameraY = 0.0f;
+        MissionManager mission;
+        RenderManager renderer;
+
+        /*
+        A pointer and not a plain member on purpose: the constructor loads
+        images off disk, and we want that to happen inside Init() together
+        with the map, not whenever the template happens to construct Game.
+        Created in Init(), freed in Shutdown().
+        */
+        Player* player = nullptr;
 
         bool keys[512] = { false };
-
-        List<TileChunk> mapChunks;
-        List<LoadedTileset> loadedTilesets;
-
-        Player* player = nullptr;
     };
 
 } // namespace Tmpl8

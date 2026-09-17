@@ -9,6 +9,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(myGame
     game.cpp
+    player.cpp
+    managers/animationManager.cpp
+    managers/missionManager.cpp
+    managers/renderManager.cpp
     template/opencl.cpp
     template/opengl.cpp
     template/scene.cpp
@@ -16,7 +20,6 @@ add_executable(myGame
     template/surface.cpp
     template/template.cpp
     template/tmpl8math.cpp
-    player.cpp
 )
 
 set_target_properties(myGame PROPERTIES DEBUG_POSTFIX _debug)

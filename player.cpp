@@ -1,141 +1,90 @@
 #include "precomp.h"
 #include "player.h"
+#include "managers/renderManager.h"
 
 namespace Tmpl8
 {
+    /*
+    This code:
+    Registers every animation the player needs and remembers the id of each
+    one. The AnimationManager loads the images and owns them, so there is no
+    new and no matching delete anywhere in this file: when the Player dies,
+    its AnimationManager member dies with it and frees the sheets in its own
+    destructor. That is why the Player does not need a destructor at all
+    anymore.
+
+    The two numbers per line are how many frames are packed into that sheet
+    and how long one frame lasts in seconds (0.10 = 10 fps).
+    */
     Player::Player()
     {
-        Surface* idleSurface = new Surface("../assets/Marco/Marco_merged.png");
-        idleSprite = new Sprite(idleSurface, idleFrames);
-
-        Surface* runSurface = new Surface("../assets/Marco/runMarco_merged.png");
-        runSprite = new Sprite(runSurface, runFrames);
-
-        activeSprite = idleSprite;
+        idleClip = animations.AddClip("../assets/Marco/Marco_merged.png", 4, 0.10f);
+        runClip = animations.AddClip("../assets/Marco/runMarco_merged.png", 6, 0.10f);
     }
 
-    Player::~Player()
-    {
-        delete idleSprite;
-        delete runSprite;
-    }
+    /*
+    This code:
+    Runs once every frame and does three things in order:
+    1. reads the keyboard and builds a movement direction
+    2. moves the position using that direction
+    3. tells the animation manager wich clip belongs to what we are doing
 
+    Why multiply by deltaTime?
+    deltaTime is the amount of seconds the last frame took. By multiplying the
+    speed with it, the player moves the same distance per second no matter how
+    fast or slow the pc is running. Without it the player would sprint on a
+    fast machine and crawl on a slow one.
+
+    Why there is no state enum anymore:
+    Play() already ignores a clip that is the same one it is playing, and
+    restarts the timer for one that is not. That was the only thing the old
+    PlayerState enum and the "did the state change" check were for, so
+    "moving or not" can just pick a clip id directly.
+    */
     void Player::Update(float deltaTime, const bool* keys)
     {
-        velocity = { 0.0f, 0.0f };
+        velocity = { 0.0f, 0.0f }; // rebuild the direction from scratch every frame
 
-        if (keys['a'] || keys['A'] || keys[GLFW_KEY_LEFT])  velocity.x += 1.0f;
-        if (keys['d'] || keys['D'] || keys[GLFW_KEY_RIGHT]) velocity.x -= 1.0f;
+        // LIFE IS MOVEMENT
+        if (keys['a'] || keys['A']) velocity.x -= 1.0f;
+        if (keys['d'] || keys['D']) velocity.x += 1.0f;
+        if (keys['w'] || keys['W']) velocity.y -= 1.0f;
+        if (keys['s'] || keys['S']) velocity.y += 1.0f;
 
-        // Richting bepalen (gespiegeld of niet)
+        // decide wich direction to face, and keep facing it when we stop
         if (velocity.x < 0.0f) facingRight = false;
         else if (velocity.x > 0.0f) facingRight = true;
 
-        if (velocity.x != 0.0f && velocity.y != 0.0f)
-        {
-            velocity.x *= 0.7071f;
-            velocity.y *= 0.7071f;
-        }
-
+        // direction * speed * time = distance moved this frame
         position.x += velocity.x * speed * deltaTime;
         position.y += velocity.y * speed * deltaTime;
 
-        PlayerState newState = (velocity.x != 0.0f || velocity.y != 0.0f) ? PlayerState::Running : PlayerState::Idle;
-
-        if (newState != state)
-        {
-            state = newState;
-            currentFrame = 0;
-            animTimer = 0.0f;
-        }
-
-        unsigned int maxFrames = 0;
-        if (state == PlayerState::Running)
-        {
-            activeSprite = runSprite;
-            maxFrames = runFrames;
-        }
-        else
-        {
-            activeSprite = idleSprite;
-            maxFrames = idleFrames;
-        }
-
-        animTimer += deltaTime;
-        if (animTimer >= frameDuration)
-        {
-            animTimer -= frameDuration;
-            currentFrame = (currentFrame + 1) % maxFrames;
-        }
-
-        if (activeSprite)
-        {
-            activeSprite->SetFrame(currentFrame);
-        }
+        // Any movement at all means running, standing still means idle
+        bool moving = (velocity.x != 0.0f || velocity.y != 0.0f);
+        animations.Play(moving ? runClip : idleClip);
+        animations.Update(deltaTime);
     }
 
-    void Player::Draw(Surface* target, float cameraX, float cameraY)
+    /*
+    This code:
+    Hands the players world position to the renderer and lets it do the rest.
+
+    World space vs view space:
+    position is where the player is on the map, wich can be far outside the
+    window. ToViewX/ToViewY add the camera offset that game.cpp set this
+    frame, wich slides everything so the player lands where we want him on
+    screen. The zoom on top of that happens inside DrawFrame.
+
+    Flipping:
+    the spritesheets only contain him facing right, so walking left is drawn
+    by reading every row of pixels backwards. facingRight -> normal,
+    facing left -> mirrored, hence the '!'.
+    */
+    void Player::Draw(Surface* target, const RenderManager& renderer) const
     {
-        if (!activeSprite) return;
-
-        int screenX = static_cast<int>(position.x + cameraX);
-        int screenY = static_cast<int>(position.y + cameraY);
-
-        if (facingRight)
-        {
-            // Standaard Tmpl8 rendering voor rechts lopen
-            activeSprite->Draw(target, screenX, screenY);
-        }
-        else
-        {
-            // Custom pixel-flip rendering voor links lopen
-            DrawFlipped(target, screenX, screenY);
-        }
-    }
-
-    void Player::DrawFlipped(Surface* target, int screenX, int screenY)
-    {
-        if (!activeSprite || !target) return;
-
-        int width = activeSprite->GetWidth();
-        int height = activeSprite->GetHeight();
-        
-        // Wijs direct naar de start van het HUIDIGE frame in de spritesheet
-        uint* src = activeSprite->GetBuffer() + currentFrame * width;
-        uint* dst = target->pixels;
-
-        int targetWidth = target->width;
-        int targetHeight = target->height;
-        int numFrames = activeSprite->GetFrameCount(); // Mocht GetFrameCount() niet bestaan, gebruik dan idleFrames / runFrames afhankelijk van de state
-
-        for (int y = 0; y < height; ++y)
-        {
-            int dy = screenY + y;
-
-            // Binnen de verticale schermgrenzen?
-            if (dy >= 0 && dy < targetHeight)
-            {
-                for (int x = 0; x < width; ++x)
-                {
-                    int dx = screenX + x;
-
-                    // Binnen de horizontale schermgrenzen?
-                    if (dx >= 0 && dx < targetWidth)
-                    {
-                        // KEY TRICK: (width - 1 - x) spiegelt de x-as van de sprite
-                        uint pixel = src[width - 1 - x];
-
-                        // Sla zwarte/transparante pixels over en teken naar het scherm
-                        if ((pixel & 0xFFFFFF) != 0)
-                        {
-                            dst[dy * targetWidth + dx] = pixel | 0xFF000000;
-                        }
-                    }
-                }
-            }
-
-            // Spring in de bron-buffer naar de volgende scanline (rij) van de spritesheet
-            src += width * numFrames;
-        }
+        animations.Draw(target, renderer,
+                        renderer.ToViewX(position.x),
+                        renderer.ToViewY(position.y),
+                        !facingRight);
     }
 }

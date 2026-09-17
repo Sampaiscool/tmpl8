@@ -4,345 +4,99 @@
 
 #include "precomp.h"
 #include "game.h"
-#include <iostream>
-
-#ifdef None
-#undef None
-#endif
-
-#include "tileson.hpp"
 
 namespace Tmpl8
 {
-    void Game::LoadTiledMap(const char* jsonPath)
-    {
-        /*
-        This code:
-        initializes the Ttileson parser to process the JSON file.
-        It parses the raw file and builds a complex data tree on top of the
-        heap. Instead of returning a raw pointer (*) it uses a unique_ptr, this way
-        you dont have to keep track of it with delete and all that stuff.
-
-        Why a unique_ptr?
-        This uses RAII (Resource Acquisition Is Initialization). When
-        'parsedMap' goes away, the allocated heap memory for the map
-        is automatically freed, preventing memory leaks which makes for more free RAM.
-
-        If the JSON is not found or corrupted or something, it triggers an early
-        return. This prevents undefined behavior and crashes
-        */
-        tson::Tileson tileson;
-        // Parse the map JSON straight into a unique_ptr on the heap
-        std::unique_ptr<tson::Map> parsedMap = tileson.parse(std::filesystem::path(jsonPath));
-
-        // Stop early if file is broken or missing to avoid crashing later
-        if (!parsedMap || parsedMap->getStatus() != tson::ParseStatus::OK)
-        {
-            std::cout << "Tileson failed to parse map JSON: " << jsonPath << std::endl;
-            return;
-        }
-
-        // Grab global tile dimensions from parsed map
-        tileWidth = parsedMap->getTileSize().x;
-        tileHeight = parsedMap->getTileSize().y;
-
-        // Reset old map chunks before loading the new one
-        mapChunks.clear();
-
-        /*
-        This code:
-        Because this project uses legacy raw Surface pointers, we
-        manually delete all old surface instances before allocating new ones.
-        Otherwise, we would leave allocations on the heap that no longer
-        have active pointers, wich is a waste of memory.
-
-        The for loop iterates over our custom 'loadedTilesets' container. For
-        each 'LoadedTileset' (lts), we delete its allocated surface image
-        and clear the container.
-
-        Path Processing:
-        Tiled often exports image paths as absolute or relative paths from its
-        own project root (like "C:/maps/assets/tiles.png"). We remove all folder
-        prefixes using std::filesystem::path::filename() to leave just the
-        pure filename ("tiles.png"). Then we add our local relative directory
-        ("../maps/assets/") using snprintf to reconstruct the full pathname.
-
-        We store 'firstGid' alongside each Surface inside the 'LoadedTileset'
-        struct. 'firstGid' represents the starting Global ID index for that
-        specific tileset. Saving this allows the engine later to map any global
-        tile index to its correct image sheet.
-        */
-        // Clean up heap memory from previously loaded surfaces
-        for (int i = 0; i < loadedTilesets.size(); ++i)
-        {
-            if (loadedTilesets[i].surface != nullptr)
-            {
-                delete loadedTilesets[i].surface;
-                loadedTilesets[i].surface = nullptr;
-            }
-        }
-        loadedTilesets.clear();
-
-        // Loop through all tilesets defined in the map JSON
-        std::vector<tson::Tileset>& tilesets = parsedMap->getTilesets();
-        for (size_t i = 0; i < tilesets.size(); ++i)
-        {
-            tson::Tileset& ts = tilesets[i];
-            LoadedTileset lts;
-            lts.firstGid = ts.getFirstgid(); // Save starting tile ID for this sheet
-
-            // Strip the directory structure from Tiled, keep only tha pure filename
-            std::string rawPath = ts.getImagePath().string();
-            std::filesystem::path path(rawPath);
-            std::string filename = path.filename().string();
-
-            // Make local relative path to assets
-            char imagePath[256];
-            snprintf(imagePath, sizeof(imagePath), "../maps/assets/%s", filename.c_str());
-
-            std::cout << "Loading tileset: [" << imagePath << "]" << std::endl;
-
-            // Allocate image surface on the heap
-            lts.surface = new Surface(imagePath);
-
-            if (!lts.surface || lts.surface->width == 0)
-            {
-                std::cout << "ERROR: Failed to load surface at " << imagePath << std::endl;
-            }
-
-            loadedTilesets.push_back(lts);
-        }
-
-        /*
-        This code:
-        Checks whether your tilemap is bounded (vast/fixed) or infinite.
-        If the map is infinite, Tiled splits it into 16x16 chunks spread
-        dynamically across world space. If the map is bounded,
-        Tiled generates 1 single chunk spanning the full map dimensions.
-        This way we support both bounded and infinite..
-
-        Bitwise Tile Masking:
-        Tiled packs additional metadata into tile id ints like as horizontal,
-        vertical and diagonal. using the highest 4 bits (31-28).
-        To get the pure tile id, wee apply a bitwise AND
-        mask: (data & 0x0FFFFFFF). This turns the upper 4 flag bits to 0,
-        leaving us with the pure id needed for mapping.
-
-        wwe read directly from layer.getData()[d] or chunkData.getData()[d]
-        and push it into our custom List<int> container, preventing any external
-        std::vector dynamic alloocations inside our game logic
-        */
-        std::vector<tson::Layer>& layers = parsedMap->getLayers();
-        for (size_t i = 0; i < layers.size(); ++i)
-        {
-            tson::Layer& layer = layers[i];
-
-            if (layer.getType() == tson::LayerType::TileLayer)
-            {
-                std::vector<tson::Chunk>& chunks = layer.getChunks();
-
-                // Bounded map: treat layer as 1 big single chunk at (0,0)
-                if (chunks.empty())
-                {
-                    TileChunk chunk;
-                    chunk.x = 0;
-                    chunk.y = 0;
-                    chunk.width = layer.getSize().x;
-                    chunk.height = layer.getSize().y;
-
-                    // Strip rotation flags (upper 4 bits) and store pure ID into my crazy List
-                    for (size_t d = 0; d < layer.getData().size(); ++d)
-                    {
-                        chunk.data.push_back(static_cast<int>(layer.getData()[d] & 0x0FFFFFFF));
-                    }
-                    mapChunks.push_back(chunk);
-                }
-                // Infinite map: load separate 16x16 grid chunks dynamically hohoho
-                else
-                {
-                    for (size_t c = 0; c < chunks.size(); ++c)
-                    {
-                        tson::Chunk& chunkData = chunks[c];
-                        TileChunk chunk;
-                        chunk.x = chunkData.getPosition().x;
-                        chunk.y = chunkData.getPosition().y;
-                        chunk.width = chunkData.getSize().x;
-                        chunk.height = chunkData.getSize().y;
-
-                        // Clean upper bits and store directly into our custom List<int>
-                        for (size_t d = 0; d < chunkData.getData().size(); ++d)
-                        {
-                            chunk.data.push_back(static_cast<int>(chunkData.getData()[d] & 0x0FFFFFFF));
-                        }
-                        mapChunks.push_back(chunk);
-                    }
-                }
-            }
-        }
-    }
-
     /*
-    This code:
-    2D pixels are stored sequentially in RAM as a 1D array
-    (row by row). We use standard 2D-to-1D index offset formulas:
-    Index = Y * Width + X
-
-    Boundary Protection & Clipping:
-    It checks wheter the drawn pixel would be in/out of the screen
-    preventing pixels from being drawn outside to screen to prevent errors
-
-    Color & Transparency Logic:
-    We remove the alpha channel (c & 0xFFFFFF) to inspect pure RGB values.
-    If a pixel is black (0x000000) or transparent, it is skipped.
-    For valid pixels, we force the highest 8 bits (alpha bits) to max
-    (c | 0xFF000000) to guarantee full opacity when written directly to
-    the screen's pixel buffer array.
+    Where the player sits on screen, as a fraction of the visible area.
+    0.5 / 0.5 would be dead center; this puts him a tenth in from the left
+    and about two thirds down, so you can see the level coming at you and
+    the ground he is standing on. Pure gameplay tuning, wich is why it lives
+    here and not in the RenderManager.
     */
-    void Game::BlitTile(Surface* targetSurface, int frameIndex, int dstX, int dstY)
-    {
-        if (!targetSurface || tileWidth <= 0) return;
-
-        // Calculate columns/rows on the tileset texture sheet
-        int tileCols = targetSurface->width / tileWidth;
-        if (tileCols <= 0) return;
-
-        int tileRows = targetSurface->height / tileHeight;
-        int maxFrames = tileCols * tileRows;
-
-        if (frameIndex < 0 || frameIndex >= maxFrames) return;
-
-        // Convert 1D frame index into 2D X/Y source coordinates inside tileset
-        int srcX = (frameIndex % tileCols) * tileWidth;
-        int srcY = (frameIndex / tileCols) * tileHeight;
-
-        uint* dst = screen->pixels; // Direct pointer to screen pixel buffer
-
-        // Copy pixels line by line
-        for (int y = 0; y < tileHeight; ++y)
-        {
-            // This is Checking against the bounds Y
-            int sy = srcY + y;
-            if (sy >= targetSurface->height) break; // Source Y bound check
-            int dy = dstY + y;
-            if (dy < 0 || dy >= screen->height) continue; // Screen Y bound check (clipping)
-
-            for (int x = 0; x < tileWidth; ++x)
-            {
-                // This is Checking against the bounds Y
-                int sx = srcX + x;
-                if (sx >= targetSurface->width) break; // Source X bound check
-                int dx = dstX + x;
-                if (dx < 0 || dx >= screen->width) continue; // Screen X bound check (clipping)
-
-                // 2D -> 1D offset formula: Y * Width + X
-                uint c = targetSurface->pixels[sy * targetSurface->width + sx];
-
-                // Skip black/transparent background pixels
-                if ((c & 0xFFFFFF) != 0)
-                {
-                    // Force alpha to 255 (0xFF) so the pixel is fully invisible
-                    dst[dy * screen->width + dx] = c | 0xFF000000;
-                }
-            }
-        }
-    }
-
-    /*
-    This code:
-    Handles camera movement input and iterates over all chunks in world space.
-    It uses explicit index-based loops over our custom List<T> structures
-
-    For each tile, it selects the correct tileset sheet based on 'firstGid',
-    calculates world coordinates shifted by the camera offset, and invokes
-    BlitTile for on-screen tiles.
-    */
-    void Game::Tick(float deltaTime)
-    {
-        screen->Clear(0x1e1e1e); // Clear screen with dark background
-
-        // Delta-time normalization
-        float dt = (deltaTime > 1.0f) ? (deltaTime / 1000.0f) : deltaTime;
-        if (dt > 0.05f) dt = 0.05f;
-
-        // 1. Update Player movement and animation using input keys
-        if (player)
-        {
-            player->Update(dt, keys);
-
-            // 2. Center Camera on Player (assuming 800x512 screen size, adjust if needed)
-            cameraX = (SCRWIDTH * 0.5f) - player->GetX();
-            cameraY = (SCRHEIGHT * 0.5f) - player->GetY();
-        }
-
-        if (loadedTilesets.empty() || mapChunks.empty()) return;
-
-        // 3. Render Tilemap Background (using updated camera position)
-        for (int c = 0; c < mapChunks.size(); ++c)
-        {
-            const TileChunk& chunk = mapChunks[c];
-
-            for (int cy = 0; cy < chunk.height; ++cy)
-            {
-                for (int cx = 0; cx < chunk.width; ++cx)
-                {
-                    int tileIndex = cx + cy * chunk.width;
-                    if (tileIndex >= chunk.data.size()) continue;
-
-                    int tileId = chunk.data[tileIndex];
-
-                    if (tileId > 0)
-                    {
-                        LoadedTileset* bestTileset = nullptr;
-
-                        for (int t = 0; t < loadedTilesets.size(); ++t)
-                        {
-                            LoadedTileset& ts = loadedTilesets[t];
-                            if (tileId >= ts.firstGid)
-                            {
-                                if (!bestTileset || ts.firstGid > bestTileset->firstGid)
-                                {
-                                    bestTileset = &ts;
-                                }
-                            }
-                        }
-
-                        if (bestTileset && bestTileset->surface)
-                        {
-                            int frameIndex = tileId - bestTileset->firstGid;
-
-                            int worldTileX = chunk.x + cx;
-                            int worldTileY = chunk.y + cy;
-
-                            int scrX = static_cast<int>((worldTileX * tileWidth) + cameraX);
-                            int scrY = static_cast<int>((worldTileY * tileHeight) + cameraY);
-
-                            if (scrX >= -tileWidth && scrX < SCRWIDTH &&
-                                scrY >= -tileHeight && scrY < SCRHEIGHT)
-                            {
-                                BlitTile(bestTileset->surface, frameIndex, scrX, scrY);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. Render Player on top of the tilemap
-        if (player)
-        {
-            player->Draw(screen, cameraX, cameraY);
-        }
-    }
+    static const float CAMERA_ANCHOR_X = 0.1f;
+    static const float CAMERA_ANCHOR_Y = 0.60f;
 
     void Game::Init()
     {
-        LoadTiledMap("../maps/superslug.json");
+        /*
+        Order matters here. The zoom is calculated from the tile size, and we
+        only know the tile size once the mission JSON has been parsed, so the
+        map has to load first. If it fails the renderer keeps its safe 1:1
+        defaults and we still get a window with the player in it instead of a
+        crash.
+        */
+        if (mission.Load("../maps/superslug.json"))
+        {
+            renderer.SetupZoom(mission.GetTileWidth());
+        }
 
         player = new Player();
-        player->SetPosition(0.0f, 83.0f); // Set starting world position
+        player->SetPosition(-1350.0f, 83.0f); // starting world position
+    }
 
-        cameraX = 0.0f;
-        cameraY = 0.0f;
+    /*
+    This code:
+    One frame, in the order it has to happen:
+    1. wipe the screen
+    2. move the player with the keys that are held down
+    3. point the camera at where he ended up
+    4. draw the level, then the player on top of it
+
+    The camera has to be updated between 2 and 4: if we drew first and moved
+    the camera after, everything would be one frame behind the player and he
+    would jitter against the background while walking.
+    */
+    void Game::Tick(float deltaTime)
+    {
+        screen->Clear(0x1e1e1e); // dark background so you can see the map edges
+
+        /*
+        Delta-time normalization.
+        The template always hands us MILLISECONDS (template.cpp: deltaTime =
+        min(500.0f, 1000.0f * timer.elapsed())), so we just divide by 1000 to
+        get seconds. We used to guess the unit with (deltaTime > 1.0f), wich
+        was a trap: any frame faster than 1 ms gives a value like 0.8, that
+        fails the test and gets used as 0.8 SECONDS instead of 0.8 ms. An 800x
+        multiplier for one frame, so Marco teleports. Vsync is off in this
+        template so high framerates are very reachable.
+
+        The clamp below limits how much SIMULATED time one frame may advance,
+        it is not an fps cap. If the game stalls (dragging the window, a
+        breakpoint) a 400 ms frame would move the player 180 * 0.4 = 72 pixels
+        in one step, straight through any wall we add later. That is called
+        tunneling. Clamping to 0.05 keeps the step small; the cost is that the
+        game runs in slow motion during a stall instead of catching up.
+        */
+        float dt = deltaTime / 1000.0f;
+        if (dt > 0.05f) dt = 0.05f;
+
+        if (player)
+        {
+            player->Update(dt, keys);
+            renderer.FollowTarget(player->GetX(), player->GetY(),
+                                  CAMERA_ANCHOR_X, CAMERA_ANCHOR_Y);
+        }
+
+        mission.Draw(screen, renderer);
+
+        if (player) player->Draw(screen, renderer);
+    }
+
+    /*
+    This code:
+    The player is the only thing here we allocated by hand, so he is the only
+    thing we have to free by hand. The managers are plain members that clean
+    up after themselves in their own destructors; mission.Unload() is called
+    anyway so the tileset images are gone at a moment we chose, instead of
+    whenever Game itself gets destroyed.
+    */
+    void Game::Shutdown()
+    {
+        delete player;
+        player = nullptr;
+
+        mission.Unload();
     }
 
 } // namespace Tmpl8
