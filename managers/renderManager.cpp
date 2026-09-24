@@ -177,4 +177,55 @@ namespace Tmpl8
             }
         }
     }
+
+    /*
+    This code:
+    Draws a hollow rectangle outline in view pixels, for debugging collision.
+
+    How it works:
+    it walks the outline only, not the inside. The top and bottom edges are
+    two horizontal runs, the left and right edges two vertical ones, so a big
+    box costs about as little as a small one and you can still see the level
+    through the middle.
+
+    Every pixel goes through the same view -> real conversion DrawFrame uses
+    (multiply by pixelScale), and gets the same clipping against the screen
+    buffer, so an outline that runs off the edge is cut instead of corrupting
+    memory. The outline is drawn 1 REAL pixel thick on purpose, not
+    pixelScale thick, so it stays a thin hairline that does not hide the art
+    it is drawn over.
+    */
+    void RenderManager::DrawBox(Surface* target, int viewX, int viewY,
+                                int width, int height, unsigned int color) const
+    {
+        if (!target || width <= 0 || height <= 0) return;
+
+        // view pixels -> real pixels, same conversion DrawFrame does
+        int left = viewX * pixelScale;
+        int top = viewY * pixelScale;
+        int right = (viewX + width) * pixelScale - 1;
+        int bottom = (viewY + height) * pixelScale - 1;
+
+        unsigned int* dst = target->pixels;
+        int targetWidth = target->width;
+        int targetHeight = target->height;
+
+        color |= 0xFF000000; // force alpha to 255 so the outline is solid
+
+        // top and bottom edges
+        for (int x = left; x <= right; ++x)
+        {
+            if (x < 0 || x >= targetWidth) continue;
+            if (top >= 0 && top < targetHeight) dst[top * targetWidth + x] = color;
+            if (bottom >= 0 && bottom < targetHeight) dst[bottom * targetWidth + x] = color;
+        }
+
+        // left and right edges
+        for (int y = top; y <= bottom; ++y)
+        {
+            if (y < 0 || y >= targetHeight) continue;
+            if (left >= 0 && left < targetWidth) dst[y * targetWidth + left] = color;
+            if (right >= 0 && right < targetWidth) dst[y * targetWidth + right] = color;
+        }
+    }
 }

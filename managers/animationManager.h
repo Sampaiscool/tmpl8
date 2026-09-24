@@ -46,10 +46,50 @@ namespace Tmpl8
         frameDuration is how long ONE frame stays on screen, in seconds, so
         0.10 gives you a 10 fps animation.
 
+        'loop' decides what happens at the end. A walk cycle loops forever;
+        a one shot like a jump should hold its last frame instead, otherwise
+        it snaps back to the crouch pose halfway through the arc and looks
+        like he jumps twice.
+
         Returns the clip id you pass to Play() later, or -1 if the image could
         not be loaded.
         */
-        int AddClip(const char* sheetPath, unsigned int frameCount, float frameDuration);
+        int AddClip(const char* sheetPath, unsigned int frameCount,
+                    float frameDuration, bool loop = true);
+
+        /*
+        Makes a new clip out of PART of a clip you already loaded, without
+        touching the disk again. Used for the fall animation, wich is just the
+        last couple of frames of the jump sheet.
+
+        The new clip SHARES the source clip's image instead of copying it, so
+        the png is only in memory once. That means it must not free it, hence
+        the ownsSheet flag on the struct below: whoever loaded the image is
+        the one who deletes it, and a sub clip never does.
+
+        firstFrame is counted in the SOURCE sheet, so (4, 2) on a six frame
+        sheet gives you frames 4 and 5. Returns -1 if the range does not fit.
+        */
+        int AddSubClip(int sourceClip, unsigned int firstFrame,
+                       unsigned int frameCount, float frameDuration, bool loop = true);
+
+        /*
+        Size of ONE frame of the clip that is playing right now. The Player
+        needs the height because not every clip is the same size: the jump
+        sheet is 64 tall where idle and run are 34, and a sprite is drawn from
+        its top left corner, so without knowing the height you cannot line up
+        the feet. Returns 0 when nothing is playing.
+        */
+        int GetFrameWidth() const;
+        int GetFrameHeight() const;
+
+        /*
+        True when a ONE SHOT clip has reached its last frame and is sitting
+        on it. A looping clip is never finished, so this is always false for
+        those. The torso layer uses it to know when the "lower the gun"
+        animation has played out and it can stop drawing itself.
+        */
+        bool IsFinished() const;
 
         /*
         Switches to a clip. Playing the clip that is already running does
@@ -78,11 +118,14 @@ namespace Tmpl8
         */
         struct AnimationClip
         {
-            Surface* sheet = nullptr;   // owned, freed in the destructor
+            Surface* sheet = nullptr;   // freed in the destructor, but only if ownsSheet
+            bool ownsSheet = true;      // false for a sub clip borrowing someone elses image
+            unsigned int firstFrame = 0;// where this clip starts inside the sheet
             int frameWidth = 0;         // width of ONE frame, not the sheet
             int frameHeight = 0;
             unsigned int frameCount = 1;
             float frameDuration = 0.1f; // seconds per frame
+            bool loop = true;           // false = stop on the last frame
         };
 
         List<AnimationClip> clips;

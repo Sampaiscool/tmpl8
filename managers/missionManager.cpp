@@ -65,6 +65,7 @@ namespace Tmpl8
         }
         tilesets.clear();
         chunks.clear();
+        colliders.clear();
 
         tileWidth = 0;
         tileHeight = 0;
@@ -144,32 +145,17 @@ namespace Tmpl8
 
         /*
         This code:
-        Checks whether the tilemap is bounded (fixed size) or infinite. An
-        infinite map is split by Tiled into small chunks spread over world
-        space; a bounded map is one single chunk spanning the full size. We
-        support both by turning either one into the same TileChunk struct.
-
-        We only care about tile layers here. Object layers (spawns, triggers,
-        collision shapes) are skipped for now, they get their own pass once
-        there is gameplay that needs them.
+        We only care about tile layers here. The object layer gets its own
+        pass right after this one, because it holds a completely different
+        kind of thing: rectangles in world pixels instead of a grid of ids.
         */
+        // Infinite map loop: we gaan er 100% vanuit dat elke TileLayer chunks gebruikt
         for (size_t i = 0; i < parsedMap->getLayers().size(); ++i)
         {
             tson::Layer& layer = parsedMap->getLayers()[i];
             if (layer.getType() != tson::LayerType::TileLayer) continue;
 
-            // Bounded map: treat the whole layer as one big chunk at (0,0)
-            if (layer.getChunks().empty())
-            {
-                TileChunk chunk;
-                chunk.width = layer.getSize().x;
-                chunk.height = layer.getSize().y;
-                FillChunkData(chunk, layer.getData());
-                chunks.push_back(chunk);
-                continue;
-            }
-
-            // Infinite map: every chunk has its own offset in world tiles
+            // Elke chunk heeft z'n eigen tegel-coördinaten in de wereld (bijv. x: 0, y: -16)
             for (size_t c = 0; c < layer.getChunks().size(); ++c)
             {
                 tson::Chunk& parsedChunk = layer.getChunks()[c];
@@ -179,14 +165,82 @@ namespace Tmpl8
                 chunk.y = parsedChunk.getPosition().y;
                 chunk.width = parsedChunk.getSize().x;
                 chunk.height = parsedChunk.getSize().y;
+
+                // Kopieer direct van Tileson container -> jouw eigen List<unsigned int>
                 FillChunkData(chunk, parsedChunk.getData());
+
                 chunks.push_back(chunk);
             }
         }
 
+        /*
+        This code:
+        Second pass over the layers, this time for the object layer, wich is
+        where the collision shapes live.
+
+        What Tiled gives us:
+        an object layer is a list of free floating shapes rather than a grid.
+        Each one carries an x/y/width/height in WORLD PIXELS (not tiles, and
+        not view pixels), wich is already exactly the shape of our AABB, so
+        loading one is a straight copy of four numbers.
+
+        Why we check a property instead of taking every object:
+        an object layer is also where spawn points, triggers and waypoints
+        would end up later. Only the ones the level designer ticked the
+        "collider" boolean on in Tiled are solid, so everything else is left
+        alone and can be picked up by a future pass without changing this one.
+
+        getProp returns a null pointer when an object simply does not have
+        that property, so we have to check that BEFORE asking for its value.
+        */
+        for (size_t i = 0; i < parsedMap->getLayers().size(); ++i)
+        {
+            tson::Layer& layer = parsedMap->getLayers()[i];
+            if (layer.getType() != tson::LayerType::ObjectGroup) continue;
+
+            for (size_t o = 0; o < layer.getObjects().size(); ++o)
+            {
+                tson::Object& object = layer.getObjects()[o];
+
+                // Skip anything that is not ticked as a collider in Tiled
+                if (object.getProp("collider") == nullptr) continue;
+                if (!object.get<bool>("collider")) continue;
+
+                Collider solid;
+                solid.box.x = static_cast<float>(object.getPosition().x);
+                solid.box.y = static_cast<float>(object.getPosition().y);
+                solid.box.w = static_cast<float>(object.getSize().x);
+                solid.box.h = static_cast<float>(object.getSize().y);
+
+                /*
+                The second, optional property. A collider with "platform"
+                ticked is a one way floor: solid to land on, but you can jump
+                up through it from underneath. Objects without the property at
+                all stay fully solid, wich is why the default is false.
+                */
+                if (object.getProp("platform") != nullptr)
+                {
+                    solid.oneWay = object.get<bool>("platform");
+                }
+
+                // A zero sized box can never be hit, so it is only dead weight
+                if (solid.box.w <= 0.0f || solid.box.h <= 0.0f) continue;
+
+                colliders.push_back(solid);
+            }
+        }
+
+        int oneWayCount = 0;
+        for (int i = 0; i < colliders.size(); ++i)
+        {
+            if (colliders[i].oneWay) ++oneWayCount;
+        }
+
         std::cout << "Mission loaded: " << jsonPath
                   << " (" << chunks.size() << " chunks, "
-                  << tilesets.size() << " tilesets)" << std::endl;
+                  << tilesets.size() << " tilesets, "
+                  << colliders.size() << " colliders, "
+                  << oneWayCount << " one way platforms)" << std::endl;
 
         return IsLoaded();
     }

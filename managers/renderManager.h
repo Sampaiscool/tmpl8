@@ -110,6 +110,18 @@ namespace Tmpl8
                        int viewX, int viewY,
                        bool flipX = false, bool flipY = false) const;
 
+        /*
+        Draws the outline of a rectangle, for debugging. Collision is invisible
+        by nature: you can only see what it stops, never the shape doing the
+        stopping. This makes those shapes visible so you can check they line up
+        with the level art and tune the player's hitbox against them.
+
+        viewX/viewY/width/height are in view pixels, same as DrawFrame, and it
+        is a hollow outline so it does not cover up the level underneath.
+        */
+        void DrawBox(Surface* target, int viewX, int viewY,
+                     int width, int height, unsigned int color) const;
+
     private:
         /*
         Filled in by SetupZoom(), do not set these by hand.

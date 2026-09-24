@@ -16,9 +16,14 @@ namespace Tmpl8
     */
     AnimationManager::~AnimationManager()
     {
+        /*
+        Only delete an image the clip actually OWNS. Sub clips share the
+        image of the clip they were cut from, so deleting through them would
+        free the same block twice, wich is a crash.
+        */
         for (int i = 0; i < clips.size(); ++i)
         {
-            delete clips[i].sheet;
+            if (clips[i].ownsSheet) delete clips[i].sheet;
             clips[i].sheet = nullptr;
         }
         clips.clear();
@@ -38,7 +43,8 @@ namespace Tmpl8
     draws nothing while looking like it worked. Both give back -1 so the
     caller knows the clip does not exist.
     */
-    int AnimationManager::AddClip(const char* sheetPath, unsigned int frameCount, float frameDuration)
+    int AnimationManager::AddClip(const char* sheetPath, unsigned int frameCount,
+                                  float frameDuration, bool loop)
     {
         if (frameCount == 0) return -1;
 
@@ -56,6 +62,7 @@ namespace Tmpl8
         clip.frameHeight = clip.sheet->height;
         clip.frameCount = frameCount;
         clip.frameDuration = frameDuration;
+        clip.loop = loop;
 
         clips.push_back(clip);
 
@@ -103,8 +110,89 @@ namespace Tmpl8
         while (animTimer >= clip.frameDuration)
         {
             animTimer -= clip.frameDuration;
-            currentFrame = (currentFrame + 1) % clip.frameCount;
+
+            if (clip.loop)
+            {
+                // wrap back to 0 and keep cycling forever
+                currentFrame = (currentFrame + 1) % clip.frameCount;
+                continue;
+            }
+
+            // one shot: advance until the last frame, then freeze on it
+            if (currentFrame + 1 < clip.frameCount)
+            {
+                ++currentFrame;
+            }
+            else
+            {
+                animTimer = 0.0f; // stop the timer running away while we hold
+                break;
+            }
         }
+    }
+
+    /*
+    This code:
+    Cuts a new clip out of a clip that is already loaded.
+
+    It copies the frame size and the image POINTER from the source, marks
+    itself as not owning that image, and remembers where in the sheet it
+    starts. Everything else (the timer, the looping) works exactly like a
+    normal clip, because as far as Update and Draw are concerned this is just
+    another clip that happens to be shorter.
+
+    The range check matters: asking for frames 4..7 of a six frame sheet would
+    read past the end of the image and draw garbage, so we refuse instead.
+    */
+    int AnimationManager::AddSubClip(int sourceClip, unsigned int firstFrame,
+                                     unsigned int frameCount, float frameDuration, bool loop)
+    {
+        if (sourceClip < 0 || sourceClip >= clips.size()) return -1;
+        if (frameCount == 0) return -1;
+
+        const AnimationClip& source = clips[sourceClip];
+
+        // the requested range has to fit inside the source clip
+        if (firstFrame + frameCount > source.firstFrame + source.frameCount) return -1;
+
+        AnimationClip clip;
+        clip.sheet = source.sheet;   // shared, NOT copied
+        clip.ownsSheet = false;      // so the destructor leaves it alone
+        clip.frameWidth = source.frameWidth;
+        clip.frameHeight = source.frameHeight;
+        clip.firstFrame = firstFrame;
+        clip.frameCount = frameCount;
+        clip.frameDuration = frameDuration;
+        clip.loop = loop;
+
+        clips.push_back(clip);
+        return clips.size() - 1;
+    }
+
+    /*
+    A looping clip runs forever so it is never "finished". A one shot clip is
+    finished once currentFrame has reached the last index, because Update
+    freezes it there instead of wrapping around.
+    */
+    bool AnimationManager::IsFinished() const
+    {
+        if (currentClip < 0) return true;
+
+        const AnimationClip& clip = clips[currentClip];
+        if (clip.loop) return false;
+
+        return currentFrame + 1 >= clip.frameCount;
+    }
+
+    // Size of one frame of whatever is playing, 0 if nothing is
+    int AnimationManager::GetFrameWidth() const
+    {
+        return (currentClip < 0) ? 0 : clips[currentClip].frameWidth;
+    }
+
+    int AnimationManager::GetFrameHeight() const
+    {
+        return (currentClip < 0) ? 0 : clips[currentClip].frameHeight;
     }
 
     void AnimationManager::Draw(Surface* target, const RenderManager& renderer,
@@ -113,7 +201,10 @@ namespace Tmpl8
         if (currentClip < 0) return;
 
         const AnimationClip& clip = clips[currentClip];
+        // currentFrame counts from 0 inside THIS clip, firstFrame shifts it
+        // to where the clip actually starts on the shared sheet.
         renderer.DrawFrame(target, clip.sheet, clip.frameWidth, clip.frameHeight,
-                           static_cast<int>(currentFrame), viewX, viewY, flipX, false);
+                           static_cast<int>(clip.firstFrame + currentFrame),
+                           viewX, viewY, flipX, false);
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "list.h"
+#include "aabb.h"
 
 namespace Tmpl8
 {
@@ -82,6 +83,14 @@ namespace Tmpl8
         // Draws every visible tile of the mission through the renderer
         void Draw(Surface* target, const RenderManager& renderer) const;
 
+        /*
+        The solid rectangles of the level, in world pixels, straight from the
+        object layer of the JSON. Handed to the Player so he can be stopped by
+        them. Returned as a const reference: no copy is made and the caller
+        cannot change the level geometry, it can only read it.
+        */
+        const List<Collider>& GetColliders() const { return colliders; }
+
         int GetTileWidth() const { return tileWidth; }
         int GetTileHeight() const { return tileHeight; }
 
@@ -98,6 +107,14 @@ namespace Tmpl8
 
         List<TileChunk> chunks;
         List<LoadedTileset> tilesets;
+
+        /*
+        Every rectangle in the object layer marked with the boolean property
+        "collider" in Tiled, each remembering whether it is also a one way
+        "platform". Plain data, no pointers, so the List copies them around
+        safely and there is nothing to free.
+        */
+        List<Collider> colliders;
 
         int tileWidth = 0;
         int tileHeight = 0;

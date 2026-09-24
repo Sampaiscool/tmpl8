@@ -69,6 +69,29 @@ void Surface::Clear( uint c )
 	for (int i = 0; i < s; i++) pixels[i] = c;
 }
 
+void Surface::CopyToScaled( Surface* d )
+{
+  int h = d->height, w = d->width;
+  float dx = (float)width / w;
+  float dy = (float)height / h;
+  // loop over pixels in surface d
+  float thisy = 0;
+  for( int a = 0, y = 0; y < h; y++ ) 
+  {
+    float thisx = 0;
+    for( int x = 0; x < w; x++ )
+    {
+      // read pixel from this
+      uint p = pixels[(int)thisx + (int)thisy * this->width];
+      // plot pixel to d
+      d->pixels[a++] = p; //d->Plot( x, y, p );
+      // advance
+      thisx += dx;
+    }
+    thisy += dy;
+  }
+}
+
 void Surface::Plot( int x, int y, uint c )
 {
 	if (x < 0 || y < 0 || x >= width || y >= height) return;

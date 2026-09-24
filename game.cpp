@@ -17,6 +17,20 @@ namespace Tmpl8
     static const float CAMERA_ANCHOR_X = 0.1f;
     static const float CAMERA_ANCHOR_Y = 0.60f;
 
+    /*
+    Draws the collision shapes on top of the level: the solid rectangles from
+    the Tiled object layer in green, the players own hitbox in yellow.
+
+    Collision is invisible by nature, you only ever see what it stops. With
+    this on you can check that the shapes line up with the art and that the
+    players hitbox sits nicely around him. Set it to false when you are done
+    looking.
+    */
+    static const bool SHOW_COLLIDERS = true;
+    static const unsigned int COLOR_SOLID = 0x00FF00;  // level geometry, green
+    static const unsigned int COLOR_PLATFORM = 0x00CCFF; // one way platforms, cyan
+    static const unsigned int COLOR_PLAYER = 0xFFFF00;   // player hitbox, yellow
+
     void Game::Init()
     {
         /*
@@ -82,7 +96,7 @@ namespace Tmpl8
 
         if (player)
         {
-            player->Update(dt, keys);
+            player->Update(dt, keys, mission.GetColliders());
             renderer.FollowTarget(player->GetX(), player->GetY(),
                                   CAMERA_ANCHOR_X, CAMERA_ANCHOR_Y);
         }
@@ -90,6 +104,39 @@ namespace Tmpl8
         mission.Draw(screen, renderer);
 
         if (player) player->Draw(screen, renderer);
+
+        /*
+        Debug overlay last, so it sits on top of everything else. Both the
+        level shapes and the player box are stored in WORLD pixels, so they go
+        through the same ToViewX/ToViewY the rest of the drawing uses; that is
+        what makes them stay glued to the level while the camera moves.
+        */
+        if (SHOW_COLLIDERS)
+        {
+            const List<Collider>& solids = mission.GetColliders();
+            for (int i = 0; i < solids.size(); ++i)
+            {
+                const AABB& box = solids[i].box;
+
+                // one way platforms in a different colour, so you can see at a
+                // glance wich shapes you are allowed to jump up through
+                unsigned int color = solids[i].oneWay ? COLOR_PLATFORM : COLOR_SOLID;
+
+                renderer.DrawBox(screen,
+                                 renderer.ToViewX(box.x), renderer.ToViewY(box.y),
+                                 static_cast<int>(box.w), static_cast<int>(box.h),
+                                 color);
+            }
+
+            if (player)
+            {
+                AABB box = player->GetBounds();
+                renderer.DrawBox(screen,
+                                 renderer.ToViewX(box.x), renderer.ToViewY(box.y),
+                                 static_cast<int>(box.w), static_cast<int>(box.h),
+                                 COLOR_PLAYER);
+            }
+        }
     }
 
     /*
