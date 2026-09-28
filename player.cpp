@@ -1,302 +1,183 @@
 #include "precomp.h"
 #include "player.h"
 #include "managers/renderManager.h"
+#include "assets.h"
+
+// template.cpp keeps a key state array up to date for us (keystate/IsKeyDown)
+// but never declares it in a header, so we do it here rather than keeping a
+// second copy of the same array.
+extern bool IsKeyDown( const uint key );
+
+#define MARCO ASSETS "assets/Marco/"
 
 namespace Tmpl8
 {
     /*
-    This code:
-    Registers every animation the player needs and remembers the id of each
-    one. The AnimationManager loads the images and owns them, so there is no
-    new and no matching delete anywhere in this file: when the Player dies,
-    its AnimationManager member dies with it and frees the sheets in its own
-    destructor. That is why the Player does not need a destructor at all
-    anymore.
+    Registers every animation and remembers the ids. The AnimationManagers own
+    the images, so there is no new and no delete in this file; Unload() is
+    what hands them back.
 
-    The two numbers per line are how many frames are packed into that sheet
-    and how long one frame lasts in seconds (0.10 = 10 fps).
+    The numbers per line are how many frames are on that sheet and how long one
+    frame lasts in seconds (0.10 = 10fps). A trailing false means it plays once
+    and holds its last frame instead of looping.
+
+    The order of the calls matters: ids are handed out in sequence, and the
+    first clip added to a layer is the one that starts playing.
     */
     Player::Player()
     {
-        #if defined(_WIN32)
-            #define MARCO "assets/Marco/"
-        #elif defined(__linux__)
-            #define MARCO "../assets/Marco/"
-        #endif
+        // Most poses are a matched pair. Idle is the odd one: the legs are a
+        // single static frame while the torso has 4 frames of breathing, which
+        // two independent timers handle without a thought.
+        idle = { legs.AddClip ( MARCO "idleLegsMarco.png",  1, 0.10f ),
+                 torso.AddClip( MARCO "idleTorsoMarco.png", 4, 0.15f ), 2.0f, -11.0f };
 
-        /*
-        Every normal state is a legs sheet and a torso sheet of the SAME frame
-        size. They get drawn at the same position, so stacking them puts the
-        character back together with no offset maths anywhere.
+        walk = { legs.AddClip ( MARCO "runLegsMarco.png",  6, 0.10f ),
+                 torso.AddClip( MARCO "runTorsoMarco.png", 6, 0.10f ), 5.0f, -11.0f };
 
-        idle is the odd one: the legs are a single static frame (he is stood
-        still, they do not move) while the torso has 4 frames of breathing.
-        Two layers with their own timers handle that without a thought.
-        */
-        idleLegs  = legs.AddClip (MARCO "idleLegsMarco.png",     1, 0.10f);
-        idleTorso = torso.AddClip(MARCO "idleTorsoMarco.png",    4, 0.15f);
+        run  = { legs.AddClip ( MARCO "runFastLegsMarco.png",  6, 0.07f ),
+                 torso.AddClip( MARCO "runFastTorsoMarco.png", 6, 0.07f ), 5.0f, -11.0f };
 
-        walkLegs  = legs.AddClip (MARCO "runLegsMarco.png",      6, 0.10f);
-        walkTorso = torso.AddClip(MARCO "runTorsoMarco.png",     6, 0.10f);
+        // Jump plays once and holds; falling is its last 2 frames on a loop.
+        // Tucked up legs sit higher, so the firing torso has to follow.
+        jump = { legs.AddClip ( MARCO "jumpLegsMarco.png",  6, 0.10f, false ),
+                 torso.AddClip( MARCO "jumpTorsoMarco.png", 6, 0.10f, false ), 5.0f, -17.0f };
 
-        runLegs   = legs.AddClip (MARCO "runFastLegsMarco.png",  6, 0.07f);
-        runTorso  = torso.AddClip(MARCO "runFastTorsoMarco.png", 6, 0.07f);
+        fall = { legs.AddSubClip ( jump.legs,  4, 2, 0.12f, true ),
+                 torso.AddSubClip( jump.torso, 4, 2, 0.12f, true ), 5.0f, -17.0f };
 
-        // jump plays once and holds; falling is its last 2 frames, looping
-        jumpLegs  = legs.AddClip (MARCO "jumpLegsMarco.png",     6, 0.10f, false);
-        jumpTorso = torso.AddClip(MARCO "jumpTorsoMarco.png",    6, 0.10f, false);
-        fallLegs  = legs.AddSubClip (jumpLegs,  4, 2, 0.12f, true);
-        fallTorso = torso.AddSubClip(jumpTorso, 4, 2, 0.12f, true);
+        // Crouch art is whole bodies, so no torso partner and no entry
+        // animation: pressing S drops him straight into the loop.
+        crouch     = { legs.AddClip( MARCO "crouch2Marco.png",    4, 0.12f ), -1 };
+        crouchWalk = { legs.AddClip( MARCO "crouchWalkMarco.png", 7, 0.10f ), -1 };
 
-        /*
-        Crouching is whole body art, so no torso partner and no entry
-        animation: pressing S drops him straight into the loop.
-        */
-        crouchLoopClip = legs.AddClip(MARCO "crouch2Marco.png",    4, 0.12f);
-        crouchWalkClip = legs.AddClip(MARCO "crouchWalkMarco.png", 7, 0.10f);
+        // Crouch-shooting is a complete sprite, head and legs in one, so it
+        // goes on the LEGS layer and nothing overlays it.
+        const int crouchShootSheet = legs.AddClip( MARCO "crouchShootMarco.png", 10, 0.06f );
+        crouchShoot    = { legs.AddSubClip( crouchShootSheet, 0, 4, 0.06f, true  ), -1 };
+        crouchShootEnd = { legs.AddSubClip( crouchShootSheet, 4, 6, 0.08f, false ), -1 };
 
-        /*
-        Crouch-shooting is a complete sprite, head and legs in one, so it goes
-        on the LEGS layer and nothing overlays it. Only the first 4 frames,
-        the ones with the muzzle flash.
-        */
-        int crouchShootSheetL = legs.AddClip(MARCO "crouchShootMarco.png", 10, 0.06f);
-        crouchShootClip    = legs.AddSubClip(crouchShootSheetL, 0, 4, 0.06f, true);
-        crouchShootRelease = legs.AddSubClip(crouchShootSheetL, 4, 6, 0.08f, false);
+        // Standing fire. Frames 0..3 are the shot itself, the only ones where
+        // the muzzle flash reaches out to x=50; 4..9 are him lowering the gun.
+        const int shootSheet = torso.AddClip( MARCO "shootTorsoMarco.png", 10, 0.06f );
+        shootTorso   = torso.AddSubClip( shootSheet, 0, 4, 0.06f, true  );
+        shootRelease = torso.AddSubClip( shootSheet, 4, 6, 0.08f, false );
+    }
 
-        /*
-        The standing firing torso. Frames 0..3 are the shot itself, the only
-        ones where the gun and muzzle flash reach out to x=50. Frames 4..9 are
-        him lowering the gun and we do not use them, so letting go of fire
-        goes straight back to the normal torso.
-        */
-        int shootSheet = torso.AddClip(MARCO "shootTorsoMarco.png", 10, 0.06f);
-        shootTorso   = torso.AddSubClip(shootSheet, 0, 4, 0.06f, true);
-        shootRelease = torso.AddSubClip(shootSheet, 4, 6, 0.08f, false);
-
-        #undef MARCO
+    void Player::Unload()
+    {
+        legs.Unload();
+        torso.Unload();
     }
 
     /*
-    This code:
-    Runs once every frame and does three things in order:
-    1. reads the keyboard and builds a movement direction
-    2. moves the position using that direction
-    3. tells the animation manager wich clip belongs to what we are doing
+    One frame: read the keys, move, then pick the animation.
 
-    Why multiply by deltaTime?
-    deltaTime is the amount of seconds the last frame took. By multiplying the
-    speed with it, the player moves the same distance per second no matter how
-    fast or slow the pc is running. Without it the player would sprint on a
-    fast machine and crawl on a slow one.
-
-    Why there is no state enum anymore:
-    Play() already ignores a clip that is the same o​ne it is playing, and
-    restarts the timer for one that is not. That was the only thing the old
-    PlayerState enum and the "did the state change" check were for, so
-    "moving or not" can just pick a clip id directly.
+    Multiplying speeds by deltaTime is what makes him travel the same distance
+    per second whatever the framerate; without it he would sprint on a fast pc
+    and crawl on a slow one.
     */
-    void Player::Update(float deltaTime, const bool* keys, const List<Collider>& colliders)
+    void Player::Update(float deltaTime, const List<Collider>& colliders)
     {
-        /*
-        Horizontal is rebuilt from the keys every frame, so letting go stops
-        him dead. Vertical is NOT read from the keys at all anymore: gravity
-        owns it now, and the only thing a key can do is give it one shove
-        upwards. That swap is what turns free flying into a platformer.
-        */
+        // Rebuilt from the keys every frame, so letting go stops him dead.
+        // Vertical is not read from the keys at all: gravity owns it, and a
+        // key can only give it one shove upwards.
         float inputX = 0.0f;
-        if (keys['a'] || keys['A']) inputX -= 1.0f;
-        if (keys['d'] || keys['D']) inputX += 1.0f;
+        if (IsKeyDown( GLFW_KEY_A )) inputX -= 1.0f;
+        if (IsKeyDown( GLFW_KEY_D )) inputX += 1.0f;
 
-        /*
-        Shift runs, S crouches.
+        const bool runDown = IsKeyDown( GLFW_KEY_LEFT_SHIFT ) || IsKeyDown( GLFW_KEY_RIGHT_SHIFT );
+        const bool crouching = onGround && IsKeyDown( GLFW_KEY_S );
 
-        Crouching is only allowed with his feet down, and it cancels the
-        walking input rather than fighting it: you plant yourself and duck.
-        Doing it this way means the crouch clip can never get interrupted
-        halfway by a stray key, and inputX being 0 makes the clip choice
-        further down fall through to the crouch branch on its own.
-        */
-        bool runDown = keys[GLFW_KEY_LEFT_SHIFT] || keys[GLFW_KEY_RIGHT_SHIFT];
-        bool crouching = onGround && (keys['s'] || keys['S']);
+        // Crouch beats run: you cannot sprint while ducked, you shuffle.
+        const float moveSpeed = crouching ? crouchSpeed : (runDown ? runSpeed : walkSpeed);
 
-        /*
-        Crouching does not stop him anymore, it just slows him to a shuffle,
-        wich is what the crouchWalk sheet is for. Crouch beats run: you cannot
-        sprint while ducked, so the shift check only applies standing up.
-        */
-        float moveSpeed = crouching ? crouchSpeed : (runDown ? runSpeed : walkSpeed);
-
-        // decide wich direction to face, and keep facing it when we stop
+        // Keep facing the last direction pressed when we stop.
         if (inputX < 0.0f) facingRight = false;
         else if (inputX > 0.0f) facingRight = true;
 
         /*
-        Jumping. Space or W, and only when his feet are on something.
-
-        The jumpHeld dance turns a key that is "down" for many frames into a
-        single press: we jump only if it is down NOW and was NOT down last
-        frame. Without it, holding the key would fire a new jump on the very
-        frame he lands, forever.
-
         A jump is just setting the vertical speed to a negative number once.
-        Nothing pushes him up after that; gravity below eats away at that
-        speed every frame until it turns positive and he comes back down. The
-        arc falls out of those two lines on its own.
+        Nothing pushes him up after that: gravity eats away at it every frame
+        until it turns positive and he comes back down, so the arc falls out
+        of these two lines on its own.
         */
-        bool jumpDown = keys[' '] || keys['w'] || keys['W'];
+        const bool jumpDown = IsKeyDown( GLFW_KEY_SPACE ) || IsKeyDown( GLFW_KEY_W );
         if (jumpDown && !jumpHeld && onGround) velocityY = -jumpSpeed;
         jumpHeld = jumpDown;
 
         /*
-        Gravity, every frame, no exceptions. Even standing still he is being
-        pulled down a little, wich is exactly what keeps onGround true: he
-        keeps pressing into the floor, so MoveAndCollide keeps stopping him
-        and keeps reporting that he landed.
+        Gravity every frame, no exceptions. Even standing still he is pulled
+        down a little, which is exactly what keeps onGround true: he keeps
+        pressing into the floor, so MoveAndCollide keeps reporting a landing.
 
-        The clamp is the anti tunneling rule from the header: never fall so
-        fast in one frame that you could cross a whole floor without ever
-        overlapping it.
+        The clamp is the anti tunneling rule: never fall so fast in one frame
+        that you could cross a whole floor without ever overlapping it.
         */
-        velocityY += gravity * deltaTime;
-        if (velocityY > maxFallSpeed) velocityY = maxFallSpeed;
+        velocityY = fminf( velocityY + gravity * deltaTime, maxFallSpeed );
 
-        // direction * speed * time = distance moved this frame, but the
-        // level gets a say in how much of it actually happens
+        // direction * speed * time = distance, but the level gets a say in
+        // how much of it actually happens
         MoveAndCollide(inputX * moveSpeed * deltaTime,
                        velocityY * deltaTime,
                        colliders);
 
         /*
-        Pick the clip. Being in the air beats everything: whatever his feet
-        are doing, if there is nothing under them he is jumping or falling.
+        Pick the pose. Being in the air beats everything: whatever his feet are
+        doing, if there is nothing under them he is jumping or falling.
+        velocityY turns positive at the top of the arc, so that sign flip is
+        exactly the moment a jump becomes a fall, no timers needed.
 
-        On the ground, only HORIZONTAL movement counts as running. Checking
-        vertical too would break now that gravity exists: he is always falling
-        a tiny bit, so the run animation would play forever, even standing
-        still.
+        On the ground only HORIZONTAL movement counts as running. Checking
+        vertical too would break now that gravity exists, because he is always
+        falling a tiny bit and the run animation would never stop.
         */
-        /*
-        Two independent choices: what the legs do, and what the torso does.
-        They are picked seperately and never consult eachother, wich is what
-        makes shooting while running or mid jump work without a single
-        combined sheet.
-
-        legsWanted is always a real clip. torsoWanted may be -1, meaning "draw
-        nothing on top", wich is the case while crouching without firing,
-        because the crouch sheets are whole bodies already.
-        */
-        int legsWanted;
-        int torsoWanted;
-
-        if (!onGround)
-        {
-            /*
-            velocityY is negative while he is still rising and turns positive
-            at the top of the arc, so that sign flip is exactly the moment a
-            jump becomes a fall. The physics already knows, no timers needed.
-            */
-            bool rising = (velocityY < 0.0f);
-            legsWanted  = rising ? jumpLegs  : fallLegs;
-            torsoWanted = rising ? jumpTorso : fallTorso;
-
-            shootOffsetX = 5.0f;   // legs are moving, same as walking
-            shootOffsetY = -17.0f; // tucked up legs sit higher, so the torso does too
-
-        }
-        else if (crouching)
-        {
-            /*
-            No entry animation, he drops straight into the crouch. Moving
-            while down there swaps to the shuffle.
-            */
-            legsWanted = (inputX != 0.0f) ? crouchWalkClip : crouchLoopClip;
-
-            // crouch art is whole body, so nothing ever overlays it
-            torsoWanted = -1;
-        }
-        else if (inputX != 0.0f)
-        {
-            legsWanted  = runDown ? runLegs  : walkLegs;
-            torsoWanted = runDown ? runTorso : walkTorso;
-
-            shootOffsetX = 5.0f;   // on the move
-            shootOffsetY = -11.0f;
-        }
-        else
-        {
-            legsWanted  = idleLegs;
-            torsoWanted = idleTorso;
-
-            shootOffsetX = 2.0f;   // stood still his stance is narrower
-            shootOffsetY = -11.0f;
-        }
+        Pose want;
+        if (!onGround)          want = (velocityY < 0.0f) ? jump : fall;
+        else if (crouching)     want = (inputX != 0.0f) ? crouchWalk : crouch;
+        else if (inputX != 0.0f)want = runDown ? run : walk;
+        else                    want = idle;
 
         /*
-        Firing. Holding F swaps in the shot animation, letting go swaps
-        straight back; there is no wind down.
+        Firing. Letting go starts the wind down, pressing again cancels it.
 
-        Standing, that means replacing only the TORSO, so the legs carry on
-        running or jumping underneath completely untouched. Crouching is
-        different: crouchShootMarco is a complete sprite with head AND legs
-        in it, so it goes on the legs layer and the torso is switched off,
-        otherwise we would be drawing his upper half twice.
-
-        Note this block still never asks what the legs are doing. Standing or
-        airborne, shooting looks the same.
+        Standing, this replaces only the TORSO so the legs carry on running or
+        jumping underneath untouched. Crouching is different: the crouch shoot
+        sheet is a complete sprite, head and legs in one, so it replaces the
+        whole pose instead of drawing his upper half twice.
         */
-        bool fireDown = keys['f'] || keys['F'];
-
-        // letting go starts the wind down; pressing again cancels it
-        if (fireDown) { shooting = true;  releasing = false; }
+        const bool fireDown = IsKeyDown( GLFW_KEY_F );
+        if (fireDown) { shooting = true; releasing = false; }
         else if (shooting) { shooting = false; releasing = true; }
 
         if (shooting || releasing)
         {
-            int standing = shooting ? shootTorso : shootRelease;
-            int ducked   = shooting ? crouchShootClip : crouchShootRelease;
-
-            if (crouching)
-            {
-                legsWanted = ducked; // whole sprite, replaces both layers
-                torsoWanted = -1;
-            }
-            else
-            {
-                torsoWanted = standing;
-            }
+            if (crouching) want = shooting ? crouchShoot : crouchShootEnd;
+            else           want.torso = shooting ? shootTorso : shootRelease;
         }
 
-        legs.Play(legsWanted);
+        legs.Play(want.legs);
         legs.Update(deltaTime);
 
-        if (torsoWanted >= 0)
+        if (want.torso >= 0)
         {
-            torso.Play(torsoWanted);
+            torso.Play(want.torso);
             torso.Update(deltaTime);
         }
 
-        /*
-        The wind down is a one shot, so ask whichever layer is playing it
-        whether it has reached the end. Crouched that is the legs layer,
-        standing it is the torso; checking the wrong one would leave him
-        stuck in the firing pose forever.
-        */
+        // The wind down is a one shot, so ask whichever layer is playing it.
+        // Crouched that is the legs, standing it is the torso; asking the
+        // wrong one would leave him stuck in the firing pose forever.
         if (releasing && (crouching ? legs.IsFinished() : torso.IsFinished()))
         {
             releasing = false;
         }
 
-        // remember for Draw(): -1 means the body sheet is the whole picture
-        torsoShowing = torsoWanted;
+        current = want; // Draw is const and runs after us, so it just reads this
     }
 
-    /*
-    This code:
-    Where the player actually is, as a solid rectangle in world pixels.
-    position is the top left of the SPRITE, so we shift by the hitbox offsets
-    to get the smaller box that the level is allowed to stop.
-    */
+    // position is the top left of the SPRITE, so shift by the offsets to get
+    // the smaller box the level is allowed to stop.
     AABB Player::GetBounds() const
     {
         AABB box;
@@ -308,35 +189,27 @@ namespace Tmpl8
     }
 
     /*
-    This code:
     Moves the player and refuses to let him end up inside anything solid.
 
-    The important idea: ONE AXIS AT A TIME.
-    We move horizontally, fix any overlap we caused horizontally, and only
-    then move vertically and fix that. Doing both at once and then trying to
-    repair it is where collision code usually goes wrong, because once the
-    boxes overlap you can no longer tell wich direction the player came from,
-    so you cannot tell wich side to push him back out of. Moving one axis at
-    a time means the answer is always known: if he was moving right, he must
-    be pushed back to the left, full stop.
+    The important idea is ONE AXIS AT A TIME. Move horizontally, fix any
+    overlap that caused, then move vertically and fix that. Doing both at once
+    is where collision code usually goes wrong: once the boxes overlap you can
+    no longer tell which direction he came from, so you cannot tell which side
+    to push him out of. One axis at a time the answer is always known - if he
+    was moving right, he gets pushed left, full stop.
 
-    This is also what lets you slide along a wall instead of sticking to it.
-    Walking diagonally into a wall, the x move gets cancelled but the y move
-    still goes through, so you slide along it, wich feels right.
+    It is also what lets you slide along a wall: walking diagonally into one,
+    the x move is cancelled but the y move still happens.
 
-    How the push out works:
-    if he moved right, his right edge ended up past the wall's left edge, so
-    we put his right edge exactly ON the wall's left edge. Because Overlaps()
-    treats touching edges as NOT overlapping, that spot counts as free and he
-    does not get detected as stuck next frame.
+    Pushing him out puts his edge exactly ON the wall's edge. Overlaps() counts
+    touching as not overlapping, so that spot is free and he does not read as
+    stuck next frame. GetBounds() is recomputed inside the loop because pushing
+    him out of the first wall moves him, and the second test has to use the new
+    position.
 
-    We recompute GetBounds() inside the loop, because pushing him out of the
-    first wall moves him, and the box we test against the second one has to
-    be his NEW position, not the old one.
-
-    Note this only ever stops him, it never moves him on its own. It is
-    handed a distance and decides how much of it is allowed to happen; what
-    produced that distance (keys, gravity, a jump) is none of its business.
+    This only ever stops him, it never moves him on its own: it is handed a
+    distance and decides how much of it is allowed to happen. What produced
+    that distance (keys, gravity, a jump) is none of its business.
     */
     void Player::MoveAndCollide(float moveX, float moveY, const List<Collider>& colliders)
     {
@@ -345,19 +218,15 @@ namespace Tmpl8
 
         if (moveX != 0.0f)
         {
-            for (int i = 0; i < colliders.size(); ++i)
+            for (const Collider& collider : colliders)
             {
-                /*
-                A one way platform is a floor, not a wall. It must never stop
-                you sideways or you would snag on the lip of every platform
-                you walk past, so they are skipped entirely here and only ever
-                looked at on the vertical pass below.
-                */
-                if (colliders[i].oneWay) continue;
+                // A one way platform is a floor, not a wall. Stopping you
+                // sideways would snag you on the lip of every platform you
+                // walk past, so they are only looked at on the vertical pass.
+                if (collider.oneWay) continue;
 
-                const AABB& solid = colliders[i].box;
-                AABB me = GetBounds();
-                if (!Overlaps(me, solid)) continue;
+                const AABB& solid = collider.box;
+                if (!Overlaps(GetBounds(), solid)) continue;
 
                 if (moveX > 0.0f) position.x = solid.Left() - hitboxOffsetX - hitboxWidth;
                 else              position.x = solid.Right() - hitboxOffsetX;
@@ -366,56 +235,45 @@ namespace Tmpl8
 
         /*
         ---- vertical ----
-        Same as above, but this axis also has to answer two questions for the
-        jumping code: is he standing on something, and should his vertical
-        speed be thrown away?
+        Same again, but this axis also answers two questions for the jumping
+        code: is he standing on something, and should his vertical speed be
+        thrown away.
 
-        We assume he is in the air and only prove otherwise, so onGround is
-        false unless a downward move actually got stopped this frame. Walk off
-        a ledge and nothing stops him, so it stays false and he cannot jump
-        out of thin air.
+        We assume he is airborne and only prove otherwise, so walking off a
+        ledge leaves onGround false and he cannot jump out of thin air.
 
-        velocityY is zeroed on ANY vertical hit, in both directions. Landing:
-        without it his speed would keep growing while he stands there, and the
-        moment he stepped off a ledge he would drop like a stone. Ceiling: it
-        stops him from sticking to it and hovering for the rest of the jump.
+        velocityY is zeroed on ANY vertical hit. Landing: otherwise his speed
+        would keep growing while he stands there and he would drop like a stone
+        the moment he stepped off. Ceiling: it stops him sticking to it.
         */
         onGround = false;
 
-        /*
-        Where his feet were BEFORE this move. This single number is what makes
-        one way platforms work, see the test below.
-        */
-        float previousBottom = GetBounds().Bottom();
+        // Where his feet were BEFORE this move. This one number is what makes
+        // one way platforms work, see below.
+        const float previousBottom = GetBounds().Bottom();
 
         position.y += moveY;
 
         if (moveY != 0.0f)
         {
-            for (int i = 0; i < colliders.size(); ++i)
+            for (const Collider& collider : colliders)
             {
-                const Collider& collider = colliders[i];
                 const AABB& solid = collider.box;
-
-                AABB me = GetBounds();
-                if (!Overlaps(me, solid)) continue;
+                if (!Overlaps(GetBounds(), solid)) continue;
 
                 /*
-                The one way rule. Two tests, and failing either means he is
-                not landing on this platform, so we ignore it completely.
+                The one way rule, two tests, and failing either means he is not
+                landing on this platform so we ignore it completely.
 
-                1. moveY <= 0 means he is rising. A platform never stops you
-                   going up; that is the whole point, you jump straight
-                   through it from underneath.
-
+                1. moveY <= 0 means he is rising, and a platform never stops
+                   you going up: that is the whole point.
                 2. previousBottom > solid.Top() means his feet were ALREADY
-                   past the surface when the frame started, so he is inside
-                   the platform or under it, not coming down onto it. Without
-                   this he would get snapped on top the instant he jumped
-                   through, instead of passing.
+                   past the surface when the frame started, so he is inside it
+                   or under it, not coming down onto it. Without this he would
+                   get snapped on top the instant he jumped through.
 
                 Standing on one keeps working because we snap his feet exactly
-                onto Top(), so next frame previousBottom == Top(), wich is not
+                onto Top(), so next frame previousBottom == Top(), which is not
                 GREATER than it, and he lands again.
                 */
                 if (collider.oneWay)
@@ -427,7 +285,7 @@ namespace Tmpl8
                 if (moveY > 0.0f)
                 {
                     position.y = solid.Top() - hitboxOffsetY - hitboxHeight;
-                    onGround = true; // landed on top of something
+                    onGround = true;
                 }
                 else
                 {
@@ -440,82 +298,62 @@ namespace Tmpl8
     }
 
     /*
-    This code:
-    Hands the players world position to the renderer and lets it do the rest.
+    Hands the player's world position to the renderer and lets it do the rest.
+    position is where he is on the map, which can be far outside the window;
+    ToViewX/ToViewY add the camera offset and DrawFrame applies the zoom.
 
-    World space vs view space:
-    position is where the player is on the map, wich can be far outside the
-    window. ToViewX/ToViewY add the camera offset that game.cpp set this
-    frame, wich slides everything so the player lands where we want him on
-    screen. The zoom on top of that happens inside DrawFrame.
-
-    Flipping:
-    the spritesheets only contain him facing right, so walking left is drawn
-    by reading every row of pixels backwards. facingRight -> normal,
-    facing left -> mirrored, hence the '!'.
+    The sheets only contain him facing right, so walking left is drawn by
+    reading every row of pixels backwards, hence the '!'.
     */
-    void Player::Draw(Surface* target, const RenderManager& renderer) const
+    void Player::Draw(const RenderManager& renderer) const
     {
         /*
         Line the clips up by their FEET, not their top corner.
 
-        A sprite is drawn downwards from the position you give it, so two
-        clips of different heights drawn at the same y end up with their feet
-        in different places. Idle and run are 34 tall, the jump sheet is 64,
-        so drawing them all at position.y would drop him 30 pixels through the
-        floor the moment he jumped.
+        A sprite is drawn downwards from the position you give it, so two clips
+        of different heights drawn at the same y end up with their feet in
+        different places. position.y + spriteBaseHeight is where his feet are,
+        and subtracting the height of whatever is playing gives the top corner
+        that puts them there. Add a 96 tall death animation later and it lines
+        up with no extra code.
 
-        position.y is the top of a NORMAL frame, so position.y +
-        spriteBaseHeight is where his feet are. Subtracting the height of
-        whatever clip is showing gives the top corner that puts those feet in
-        the right spot, whatever size the art happens to be. Add a 96 tall
-        death animation later and it lines up with no extra code.
+        Horizontally, most frames are 34 wide and land on position.x. The wide
+        ones carry that extra as padding on the GUN side, so mirroring one puts
+        the padding on the wrong side and it has to be slid back.
         */
-        float feetY = position.y + spriteBaseHeight;
+        const float feetY = position.y + spriteBaseHeight;
 
-        /*
-        Every sheet is bottom aligned on his feet, whatever size it is. The
-        artist drew each frame sitting on the bottom of its canvas, so "put
-        the bottom of the frame at the feet" is all the vertical maths there
-        is, and a 34 tall sheet lines up with a 64 tall one for free.
+        const float legsGap = static_cast<float>(legs.GetFrameWidth()) - bodyFrameWidth;
+        const float legsX = facingRight ? position.x : position.x - legsGap;
 
-        Horizontally, most frames are 34 wide and land straight on position.x.
-        The wide ones (51 for the firing sheets, 35 for the crouch walk) carry
-        that extra width as padding on the GUN side. Mirror one of those and
-        the padding ends up on the wrong side, pushing him sideways, so facing
-        left we slide the frame back by however much wider than a body it is.
-        */
-        float legsGap = static_cast<float>(legs.GetFrameWidth()) - bodyFrameWidth;
-        float legsX = facingRight ? position.x : position.x - legsGap;
-
-        legs.Draw(target, renderer,
+        legs.Draw(renderer,
                   renderer.ToViewX(legsX),
                   renderer.ToViewY(feetY - static_cast<float>(legs.GetFrameHeight())),
                   !facingRight);
 
-        if (torsoShowing < 0) return; // crouching, or crouch shooting: one sprite is all there is
+        if (current.torso < 0) return; // crouching: one sprite is all there is
 
         /*
         The torso on top. For the paired sheets this lands at exactly the same
-        spot as the legs, because the merge tool's nudges are baked into the
-        images themselves, so there is nothing left to correct.
-
-        The firing torso is the exception: it is the one sheet that never went
-        through that alignment, so it gets a hand tuned nudge. Mirror the X
-        part of it too, otherwise the gun drifts the wrong way when he turns.
+        spot as the legs, because the merge tool baked the alignment into the
+        images. The firing torso is the exception and gets the pose's hand
+        tuned nudge, mirrored along with everything else so the gun does not
+        drift the wrong way when he turns.
         */
-        bool firing = (torsoShowing == shootTorso || torsoShowing == shootRelease);
+        const bool firing = (current.torso == shootTorso || current.torso == shootRelease);
 
-        float torsoGap = static_cast<float>(torso.GetFrameWidth()) - bodyFrameWidth;
-        float nudgeX = torsoOffsetX + (firing ? shootOffsetX : 0.0f);
-        float nudgeY = firing ? shootOffsetY : 0.0f;
+        const float torsoGap = static_cast<float>(torso.GetFrameWidth()) - bodyFrameWidth;
+        const float nudgeX = firing ? current.shootX : 0.0f;
+        const float nudgeY = firing ? current.shootY : 0.0f;
 
-        float torsoX = facingRight ? (position.x + nudgeX)
-                                   : (position.x - torsoGap - nudgeX);
+        const float torsoX = facingRight ? (position.x + nudgeX)
+                                         : (position.x - torsoGap - nudgeX);
 
-        torso.Draw(target, renderer,
+        torso.Draw(renderer,
                    renderer.ToViewX(torsoX),
                    renderer.ToViewY(feetY - static_cast<float>(torso.GetFrameHeight()) + nudgeY),
                    !facingRight);
     }
 }
+
+#undef MARCO

@@ -1,14 +1,11 @@
 #include "precomp.h"
 #include "missionManager.h"
 #include "renderManager.h"
-#include <iostream>
+#include "assets.h"
 
-/*
-X11 defines a macro called 'None', and tileson has a member with that same
-name. Without undefining it first the preprocessor rewrites tileson's code
-and the compile fails with errors that make no sense. Only needed on Linux,
-but the #ifdef makes it harmless everywhere.
-*/
+// X11 defines a macro called 'None' and tileson has a member with that name,
+// so without this the preprocessor rewrites tileson and the compile fails with
+// errors that make no sense. Linux only, but harmless everywhere.
 #ifdef None
 #undef None
 #endif
@@ -18,50 +15,20 @@ but the #ifdef makes it harmless everywhere.
 namespace Tmpl8
 {
     /*
-    This code:
-    Copies the tile ids of one layer or chunk into our own List, so that from
-    here on the engine only ever touches List<T> and never an STL container.
-
-    Why a template on the CONTAINER and not on the element?
-    tileson stores its layer data and its chunk data in two different
-    container types that hold two different int types, and both of them are
-    tilesons own storage that we may only read. Templating on the container
-    means we never have to name or declare an STL container ourselves: we
-    borrow whatever tileson hands us for the length of this one loop and copy
-    it straight into our own List<unsigned int>.
-
-    The static_cast to unsigned keeps the bit pattern exactly as it was, flip
-    flags included; it does not change any bits, it only changes how we are
-    allowed to read them.
+    How Tiled packs a tile: the low 28 bits are the id, the top bits are flip
+    flags. (Bit 29, the diagonal flip, would need a transpose and is not
+    supported here.)
     */
-    template<typename Container>
-    static void FillChunkData(TileChunk& chunk, const Container& data)
-    {
-        for (size_t d = 0; d < data.size(); ++d)
-        {
-            chunk.data.push_back(static_cast<unsigned int>(data[d]));
-        }
-    }
+    static const unsigned int TILE_ID_MASK = 0x0FFFFFFFu;
+    static const unsigned int TILE_FLIP_H  = 0x80000000u;
+    static const unsigned int TILE_FLIP_V  = 0x40000000u;
 
-    /*
-    This code:
-    Gives back all the heap memory the tileset images took.
-
-    Because these are legacy raw Surface pointers (no unique_ptr here) we have
-    to clean up by hand, otherwise the pixel buffers stay on the heap for the
-    rest of the program wich is a waste of RAM. Setting each pointer to
-    nullptr after the delete makes a dangling pointer impossible if this runs
-    twice.
-
-    chunks.clear() only resets the element count, the List keeps its block so
-    loading the next mission does not have to allocate again from scratch.
-    */
     void MissionManager::Unload()
     {
-        for (int i = 0; i < tilesets.size(); ++i)
+        for (LoadedTileset& tileset : tilesets)
         {
-            delete tilesets[i].surface;
-            tilesets[i].surface = nullptr;
+            delete tileset.surface;
+            tileset.surface = nullptr;
         }
         tilesets.clear();
         chunks.clear();
@@ -72,204 +39,132 @@ namespace Tmpl8
     }
 
     /*
-    This code:
-    Initializes the tileson parser to process the JSON file. It parses the raw
-    file and builds a complex data tree on the heap. Instead of returning a
-    raw pointer it gives back a unique_ptr, so you dont have to keep track of
-    it with delete and all that stuff.
+    Parses the JSON and copies out the few things we need.
 
-    Why a unique_ptr?
-    This uses RAII (Resource Acquisition Is Initialization). When 'parsedMap'
-    goes out of scope at the end of this function, the heap memory for the
-    whole parsed tree is freed automaticly, preventing a leak. We only copy
-    out the few things we actually need first.
+    tileson hands back a unique_ptr to a whole parsed tree; letting it go out
+    of scope at the end frees all of that for us, so nothing in here leaks.
 
-    If the JSON is missing or corrupted we return false before touching
-    anything, so a failed load leaves the previous mission intact instead of
-    half destroying it.
-
-    Path processing:
-    Tiled exports image paths relative to its own project root (like
-    "assets/tiles.png" or even "C:/maps/assets/tiles.png"). We throw away all
-    folder prefixes with std::filesystem::path::filename() to leave just the
-    pure filename ("tiles.png"), then glue our own relative directory in front
-    of it so the path works from the build folder.
+    A failed parse returns before Unload(), so a broken file leaves the
+    previous mission intact instead of half destroying it.
     */
     bool MissionManager::Load(const char* jsonPath)
     {
         tson::Tileson tileson;
         std::unique_ptr<tson::Map> parsedMap = tileson.parse(std::filesystem::path(jsonPath));
 
-        // Stop early if the file is broken or missing, to avoid crashing later
         if (!parsedMap || parsedMap->getStatus() != tson::ParseStatus::OK)
         {
-            std::cout << "Tileson failed to parse map JSON: " << jsonPath << std::endl;
+            printf( "Tileson failed to parse map JSON: %s\n", jsonPath );
             return false;
         }
 
-        // Out with the old mission before we put the new one in
-        Unload();
+        Unload(); // out with the old mission before putting the new one in
 
-        // Global tile size, this is what the zoom is calculated from later
         tileWidth = parsedMap->getTileSize().x;
         tileHeight = parsedMap->getTileSize().y;
 
-        for (size_t i = 0; i < parsedMap->getTilesets().size(); ++i)
+        for (tson::Tileset& parsedTileset : parsedMap->getTilesets())
         {
-            tson::Tileset& parsedTileset = parsedMap->getTilesets()[i];
-
             LoadedTileset loaded;
-            loaded.firstGid = parsedTileset.getFirstgid(); // starting tile id of this sheet
+            loaded.firstGid = parsedTileset.getFirstgid();
 
-            // Strip Tiled's directory structure, keep only the pure filename
-            std::filesystem::path imagePath(parsedTileset.getImagePath().string());
-            std::string filename = imagePath.filename().string();
+            // Tiled writes image paths relative to its own project root, and
+            // sometimes absolute. Keep only the filename and put our own
+            // folder in front of it.
+            const std::filesystem::path imagePath(parsedTileset.getImagePath().string());
+            const std::string localPath = std::string(ASSETS "maps/assets/") + imagePath.filename().string();
 
-            char localPath[256];
-
-            #if defined(_WIN32)
-                snprintf(localPath, sizeof(localPath), "maps/assets/%s", filename.c_str());
-            #elif defined(__linux__)
-                snprintf(localPath, sizeof(localPath), "../maps/assets/%s", filename.c_str());
-            #endif
-
-            loaded.surface = new Surface(localPath);
-
-            if (loaded.surface->width == 0)
-            {
-                std::cout << "ERROR: failed to load tileset image at " << localPath << std::endl;
-            }
-
+            loaded.surface = new Surface(localPath.c_str());
             tilesets.push_back(loaded);
         }
 
         /*
-        This code:
-        We only care about tile layers here. The object layer gets its own
-        pass right after this one, because it holds a completely different
-        kind of thing: rectangles in world pixels instead of a grid of ids.
+        One pass over the layers. The two kinds hold completely different
+        things, so they fill different lists: a tile layer is a grid of ids, an
+        object layer is free floating rectangles already in world pixels.
         */
-        // Infinite map loop: we gaan er 100% vanuit dat elke TileLayer chunks gebruikt
-        for (size_t i = 0; i < parsedMap->getLayers().size(); ++i)
+        for (tson::Layer& layer : parsedMap->getLayers())
         {
-            tson::Layer& layer = parsedMap->getLayers()[i];
-            if (layer.getType() != tson::LayerType::TileLayer) continue;
-
-            // Elke chunk heeft z'n eigen tegel-coördinaten in de wereld (bijv. x: 0, y: -16)
-            for (size_t c = 0; c < layer.getChunks().size(); ++c)
+            if (layer.getType() == tson::LayerType::TileLayer)
             {
-                tson::Chunk& parsedChunk = layer.getChunks()[c];
-
-                TileChunk chunk;
-                chunk.x = parsedChunk.getPosition().x;
-                chunk.y = parsedChunk.getPosition().y;
-                chunk.width = parsedChunk.getSize().x;
-                chunk.height = parsedChunk.getSize().y;
-
-                // Kopieer direct van Tileson container -> jouw eigen List<unsigned int>
-                FillChunkData(chunk, parsedChunk.getData());
-
-                chunks.push_back(chunk);
-            }
-        }
-
-        /*
-        This code:
-        Second pass over the layers, this time for the object layer, wich is
-        where the collision shapes live.
-
-        What Tiled gives us:
-        an object layer is a list of free floating shapes rather than a grid.
-        Each one carries an x/y/width/height in WORLD PIXELS (not tiles, and
-        not view pixels), wich is already exactly the shape of our AABB, so
-        loading one is a straight copy of four numbers.
-
-        Why we check a property instead of taking every object:
-        an object layer is also where spawn points, triggers and waypoints
-        would end up later. Only the ones the level designer ticked the
-        "collider" boolean on in Tiled are solid, so everything else is left
-        alone and can be picked up by a future pass without changing this one.
-
-        getProp returns a null pointer when an object simply does not have
-        that property, so we have to check that BEFORE asking for its value.
-        */
-        for (size_t i = 0; i < parsedMap->getLayers().size(); ++i)
-        {
-            tson::Layer& layer = parsedMap->getLayers()[i];
-            if (layer.getType() != tson::LayerType::ObjectGroup) continue;
-
-            for (size_t o = 0; o < layer.getObjects().size(); ++o)
-            {
-                tson::Object& object = layer.getObjects()[o];
-
-                // Skip anything that is not ticked as a collider in Tiled
-                if (object.getProp("collider") == nullptr) continue;
-                if (!object.get<bool>("collider")) continue;
-
-                Collider solid;
-                solid.box.x = static_cast<float>(object.getPosition().x);
-                solid.box.y = static_cast<float>(object.getPosition().y);
-                solid.box.w = static_cast<float>(object.getSize().x);
-                solid.box.h = static_cast<float>(object.getSize().y);
-
-                /*
-                The second, optional property. A collider with "platform"
-                ticked is a one way floor: solid to land on, but you can jump
-                up through it from underneath. Objects without the property at
-                all stay fully solid, wich is why the default is false.
-                */
-                if (object.getProp("platform") != nullptr)
+                // Every chunk carries its own tile coordinates in the world.
+                for (tson::Chunk& parsedChunk : layer.getChunks())
                 {
-                    solid.oneWay = object.get<bool>("platform");
+                    TileChunk chunk;
+                    chunk.x = parsedChunk.getPosition().x;
+                    chunk.y = parsedChunk.getPosition().y;
+                    chunk.width = parsedChunk.getSize().x;
+                    chunk.height = parsedChunk.getSize().y;
+
+                    // Copy tileson's storage into our own List. The cast keeps
+                    // the bit pattern exactly, flip flags included; it only
+                    // changes how we are allowed to read it.
+                    for (const auto& value : parsedChunk.getData())
+                    {
+                        chunk.data.push_back(static_cast<unsigned int>(value));
+                    }
+
+                    chunks.push_back(chunk);
                 }
+            }
+            else if (layer.getType() == tson::LayerType::ObjectGroup)
+            {
+                for (tson::Object& object : layer.getObjects())
+                {
+                    /*
+                    Only objects the designer ticked "collider" on are solid.
+                    An object layer is also where spawn points and triggers
+                    will end up later, so everything else is left alone.
 
-                // A zero sized box can never be hit, so it is only dead weight
-                if (solid.box.w <= 0.0f || solid.box.h <= 0.0f) continue;
+                    getProp returns null when the property is simply absent, so
+                    that has to be checked before asking for the value.
+                    */
+                    if (object.getProp("collider") == nullptr) continue;
+                    if (!object.get<bool>("collider")) continue;
 
-                colliders.push_back(solid);
+                    Collider solid;
+                    solid.box.x = static_cast<float>(object.getPosition().x);
+                    solid.box.y = static_cast<float>(object.getPosition().y);
+                    solid.box.w = static_cast<float>(object.getSize().x);
+                    solid.box.h = static_cast<float>(object.getSize().y);
+
+                    // Optional. Without it a collider stays solid from every
+                    // side, which is why the default is false.
+                    if (object.getProp("platform") != nullptr)
+                    {
+                        solid.oneWay = object.get<bool>("platform");
+                    }
+
+                    if (solid.box.w <= 0.0f || solid.box.h <= 0.0f) continue; // can never be hit
+
+                    colliders.push_back(solid);
+                }
             }
         }
 
-        int oneWayCount = 0;
-        for (int i = 0; i < colliders.size(); ++i)
-        {
-            if (colliders[i].oneWay) ++oneWayCount;
-        }
-
-        std::cout << "Mission loaded: " << jsonPath
-                  << " (" << chunks.size() << " chunks, "
-                  << tilesets.size() << " tilesets, "
-                  << colliders.size() << " colliders, "
-                  << oneWayCount << " one way platforms)" << std::endl;
+        printf( "Mission loaded: %s (%i chunks, %i tilesets, %i colliders)\n",
+                jsonPath, chunks.size(), tilesets.size(), colliders.size() );
 
         return IsLoaded();
     }
 
     /*
-    This code:
-    Finds out wich image a global tile id belongs to.
+    Tiled numbers the tiles of every tileset in one continuous sequence, so the
+    sheet we want is the one with the HIGHEST firstGid that is still <= the id.
+    Scanning them all rather than stopping at the first hit means the order
+    they happen to sit in does not matter.
 
-    Tiled numbers the tiles of every tileset in one continuous sequence: the
-    first sheet might own ids 1..4662, the next one starts at 4663, and so on.
-    So the sheet we want is the one with the HIGHEST firstGid that is still
-    less than or equal to our tile id. We scan them all and keep the best
-    match instead of stopping at the first hit, so the order the tilesets
-    happen to sit in does not matter.
-
-    Subtracting firstGid turns the global id into a local cell number inside
-    that one sheet, wich is exactly what RenderManager::DrawFrame wants.
+    Subtracting firstGid turns the global id into a cell number inside that one
+    sheet, which is what DrawFrame wants.
     */
     Surface* MissionManager::ResolveTile(int tileId, int& frameIndex) const
     {
         const LoadedTileset* best = nullptr;
 
-        for (int t = 0; t < tilesets.size(); ++t)
+        for (const LoadedTileset& tileset : tilesets)
         {
-            if (tilesets[t].firstGid > tileId) continue;
-            if (!best || tilesets[t].firstGid > best->firstGid)
-            {
-                best = &tilesets[t];
-            }
+            if (tileset.firstGid > tileId) continue;
+            if (!best || tileset.firstGid > best->firstGid) best = &tileset;
         }
 
         if (!best || !best->surface) return nullptr;
@@ -279,56 +174,42 @@ namespace Tmpl8
     }
 
     /*
-    This code:
-    Walks every tile of every chunk and draws the ones you can see.
-
-    The early 'continue' guards do the heavy lifting for performance: an empty
-    cell costs one comparison, and an off screen tile costs two coordinate
-    calculations. We only pay the real per pixel price for tiles that are
-    actually on screen, wich is what makes a 144 tile wide map cheap to draw.
-
-    Splitting the raw Tiled value:
-    0x0FFFFFFF keeps the low 28 bits = the pure tile id.
-    0x80000000 is bit 31 = mirror horizontally.
-    0x40000000 is bit 30 = mirror vertically.
-    (bit 29, 0x20000000, is the diagonal flip wich would need a transpose, we
-    dont support that one yet.)
+    Walks every tile of every chunk and draws the ones you can see. The early
+    continues do the heavy lifting: an empty cell costs one comparison and an
+    off screen tile costs two coordinate calculations, so we only pay the per
+    pixel price for tiles that are actually visible.
     */
-    void MissionManager::Draw(Surface* target, const RenderManager& renderer) const
+    void MissionManager::Draw(const RenderManager& renderer) const
     {
         if (!IsLoaded()) return;
 
-        for (int c = 0; c < chunks.size(); ++c)
+        for (const TileChunk& chunk : chunks)
         {
-            const TileChunk& chunk = chunks[c];
-
             for (int cy = 0; cy < chunk.height; ++cy)
             {
                 for (int cx = 0; cx < chunk.width; ++cx)
                 {
-                    // 2D -> 1D offset formula: Y * Width + X
-                    int cellIndex = cx + cy * chunk.width;
+                    const int cellIndex = cx + cy * chunk.width; // Y * Width + X
                     if (cellIndex >= chunk.data.size()) continue;
 
-                    unsigned int rawTile = chunk.data[cellIndex];
+                    const unsigned int rawTile = chunk.data[cellIndex];
 
-                    // 0 means "empty cell" in Tiled, so there is nothing to draw
-                    int tileId = static_cast<int>(rawTile & 0x0FFFFFFF);
-                    if (tileId == 0) continue;
+                    const int tileId = static_cast<int>(rawTile & TILE_ID_MASK);
+                    if (tileId == 0) continue; // 0 is an empty cell in Tiled
 
                     int frameIndex = 0;
                     Surface* sheet = ResolveTile(tileId, frameIndex);
                     if (!sheet) continue;
 
                     // Tile grid position -> world pixels -> view pixels
-                    int viewX = renderer.ToViewX(static_cast<float>((chunk.x + cx) * tileWidth));
-                    int viewY = renderer.ToViewY(static_cast<float>((chunk.y + cy) * tileHeight));
+                    const int viewX = renderer.ToViewX(static_cast<float>((chunk.x + cx) * tileWidth));
+                    const int viewY = renderer.ToViewY(static_cast<float>((chunk.y + cy) * tileHeight));
                     if (!renderer.IsInView(viewX, viewY, tileWidth, tileHeight)) continue;
 
-                    renderer.DrawFrame(target, sheet, tileWidth, tileHeight, frameIndex,
+                    renderer.DrawFrame(sheet, tileWidth, tileHeight, frameIndex,
                                        viewX, viewY,
-                                       (rawTile & 0x80000000u) != 0,
-                                       (rawTile & 0x40000000u) != 0);
+                                       (rawTile & TILE_FLIP_H) != 0,
+                                       (rawTile & TILE_FLIP_V) != 0);
                 }
             }
         }

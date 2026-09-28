@@ -11,15 +11,13 @@
 namespace Tmpl8
 {
     /*
-    This code:
-    Game is the glue, nothing more. It owns the managers, forwards input into
-    them and decides the order things happen in each frame. Every actual job
-    lives in one manager.
+    Game is the glue and nothing more: it owns the managers and decides the
+    order things happen in each frame. Every actual job lives in a manager.
 
-    Everything the managers took over used to sit in this class: the tile
-    structs, the tileset list, the zoom fields, the camera, the blitter and
-    the whole map parser. The zoom setting itself (TILES_ON_SCREEN) moved to
-    renderManager.h, because that is what reads it.
+    The input callbacks are empty because the template already keeps a key
+    state array of its own (keystate/IsKeyDown in template.cpp) and the Player
+    reads that directly. They still have to exist, TheApp declares them pure
+    virtual.
     */
     class Game : public TheApp
     {
@@ -30,28 +28,17 @@ namespace Tmpl8
 
         void MouseUp(int) {}
         void MouseDown(int) {}
-        void MouseMove(int x, int y) { mousePos.x = x; mousePos.y = y; }
+        void MouseMove(int, int) {}
         void MouseWheel(float) {}
-        // Key released -> mark it as not held. Key pressed -> mark it as held.
-        // The '& 511' keeps the index inside the array no matter what code GLFW sends.
-        void KeyUp(int key) { keys[key & 511] = false; }
-        void KeyDown(int key) { keys[key & 511] = true; }
-
-        int2 mousePos;
+        void KeyUp(int) {}
+        void KeyDown(int) {}
 
     private:
+        void DrawDebugColliders();
+
         MissionManager mission;
         RenderManager renderer;
-
-        /*
-        A pointer and not a plain member on purpose: the constructor loads
-        images off disk, and we want that to happen inside Init() together
-        with the map, not whenever the template happens to construct Game.
-        Created in Init(), freed in Shutdown().
-        */
-        Player* player = nullptr;
-
-        bool keys[512] = { false };
+        Player player;
     };
 
 } // namespace Tmpl8

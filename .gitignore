@@ -355,3 +355,6 @@ result
 .ccls-cache
 .cache
 __cmake*/
+
+# Claude Code worktrees and session data
+.claude/
