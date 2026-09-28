@@ -305,7 +305,7 @@ namespace Tmpl8
     The sheets only contain him facing right, so walking left is drawn by
     reading every row of pixels backwards, hence the '!'.
     */
-    void Player::Draw(Surface* target, const RenderManager& renderer) const
+    void Player::Draw(const RenderManager& renderer) const
     {
         /*
         Line the clips up by their FEET, not their top corner.
@@ -326,7 +326,7 @@ namespace Tmpl8
         const float legsGap = static_cast<float>(legs.GetFrameWidth()) - bodyFrameWidth;
         const float legsX = facingRight ? position.x : position.x - legsGap;
 
-        legs.Draw(target, renderer,
+        legs.Draw(renderer,
                   renderer.ToViewX(legsX),
                   renderer.ToViewY(feetY - static_cast<float>(legs.GetFrameHeight())),
                   !facingRight);
@@ -349,7 +349,7 @@ namespace Tmpl8
         const float torsoX = facingRight ? (position.x + nudgeX)
                                          : (position.x - torsoGap - nudgeX);
 
-        torso.Draw(target, renderer,
+        torso.Draw(renderer,
                    renderer.ToViewX(torsoX),
                    renderer.ToViewY(feetY - static_cast<float>(torso.GetFrameHeight()) + nudgeY),
                    !facingRight);

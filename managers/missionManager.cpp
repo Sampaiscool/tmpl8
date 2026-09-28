@@ -179,7 +179,7 @@ namespace Tmpl8
     off screen tile costs two coordinate calculations, so we only pay the per
     pixel price for tiles that are actually visible.
     */
-    void MissionManager::Draw(Surface* target, const RenderManager& renderer) const
+    void MissionManager::Draw(const RenderManager& renderer) const
     {
         if (!IsLoaded()) return;
 
@@ -206,7 +206,7 @@ namespace Tmpl8
                     const int viewY = renderer.ToViewY(static_cast<float>((chunk.y + cy) * tileHeight));
                     if (!renderer.IsInView(viewX, viewY, tileWidth, tileHeight)) continue;
 
-                    renderer.DrawFrame(target, sheet, tileWidth, tileHeight, frameIndex,
+                    renderer.DrawFrame(sheet, tileWidth, tileHeight, frameIndex,
                                        viewX, viewY,
                                        (rawTile & TILE_FLIP_H) != 0,
                                        (rawTile & TILE_FLIP_V) != 0);

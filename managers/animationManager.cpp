@@ -149,7 +149,7 @@ namespace Tmpl8
         return (currentClip < 0) ? 0 : clips[currentClip].frameHeight;
     }
 
-    void AnimationManager::Draw(Surface* target, const RenderManager& renderer,
+    void AnimationManager::Draw(const RenderManager& renderer,
                                 int viewX, int viewY, bool flipX) const
     {
         if (currentClip < 0) return;
@@ -158,7 +158,7 @@ namespace Tmpl8
 
         // currentFrame counts from 0 inside THIS clip; firstFrame shifts it to
         // where the clip starts on the shared sheet.
-        renderer.DrawFrame(target, clip.sheet, clip.frameWidth, clip.frameHeight,
+        renderer.DrawFrame(clip.sheet, clip.frameWidth, clip.frameHeight,
                            static_cast<int>(clip.firstFrame + currentFrame),
                            viewX, viewY, flipX, false);
     }

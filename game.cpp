@@ -35,10 +35,11 @@ namespace Tmpl8
     */
     void Game::Init()
     {
-        if (mission.Load(ASSETS "maps/superslug.json"))
-        {
-            renderer.SetupZoom(mission.GetTileWidth());
-        }
+        mission.Load(ASSETS "maps/superslug.json");
+
+        // Unconditional: a failed load reports tile width 0, which leaves the
+        // renderer at 1:1 rather than leaving it without a view surface.
+        renderer.SetupZoom(mission.GetTileWidth());
 
         player.SetPosition(-1350.0f, 83.0f); // starting world position
     }
@@ -53,7 +54,7 @@ namespace Tmpl8
     */
     void Game::Tick(float deltaTime)
     {
-        screen->Clear(0x1e1e1e); // dark background so you can see the map edges
+        renderer.Clear(0x1e1e1e); // dark background so you can see the map edges
 
         /*
         The template always hands us MILLISECONDS (template.cpp: deltaTime =
@@ -71,10 +72,14 @@ namespace Tmpl8
         renderer.FollowTarget(player.GetX(), player.GetY(),
                               CAMERA_ANCHOR_X, CAMERA_ANCHOR_Y);
 
-        mission.Draw(screen, renderer);
-        player.Draw(screen, renderer);
+        mission.Draw(renderer);
+        player.Draw(renderer);
 
         if (SHOW_COLLIDERS) DrawDebugColliders();
+
+        // Everything above drew into the small view; this enlarges it onto
+        // the real screen in one pass.
+        renderer.Present(screen);
     }
 
     /*
@@ -93,15 +98,13 @@ namespace Tmpl8
             // glance which shapes you can jump up through
             const unsigned int color = collider.oneWay ? COLOR_PLATFORM : COLOR_SOLID;
 
-            renderer.DrawBox(screen,
-                             renderer.ToViewX(box.x), renderer.ToViewY(box.y),
+            renderer.DrawBox(renderer.ToViewX(box.x), renderer.ToViewY(box.y),
                              static_cast<int>(box.w), static_cast<int>(box.h),
                              color);
         }
 
         const AABB box = player.GetBounds();
-        renderer.DrawBox(screen,
-                         renderer.ToViewX(box.x), renderer.ToViewY(box.y),
+        renderer.DrawBox(renderer.ToViewX(box.x), renderer.ToViewY(box.y),
                          static_cast<int>(box.w), static_cast<int>(box.h),
                          COLOR_PLAYER);
     }
@@ -115,6 +118,7 @@ namespace Tmpl8
     {
         player.Unload();
         mission.Unload();
+        renderer.Unload();
     }
 
 } // namespace Tmpl8

@@ -70,8 +70,9 @@ namespace Tmpl8
 
         void Update(float deltaTime);
 
-        // viewX/viewY are view pixels, camera applied but not the zoom.
-        void Draw(Surface* target, const RenderManager& renderer,
+        // viewX/viewY are view pixels: camera applied, no zoom (the renderer
+        // enlarges its whole view in one go at the end of the frame).
+        void Draw(const RenderManager& renderer,
                   int viewX, int viewY, bool flipX) const;
 
     private:

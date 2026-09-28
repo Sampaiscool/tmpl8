@@ -18,29 +18,36 @@ namespace Tmpl8
     static const int TILES_ON_SCREEN = 32;
 
     /*
-    Owns everything about HOW things reach the screen: the zoom, the camera and
-    the one blitter that writes pixels. Drawing a tile and drawing an animation
-    frame are the same job (cell N of a grid), so they share DrawFrame.
+    Owns everything about HOW things reach the screen.
 
-    Three coordinate spaces, do not mix them:
+    The zoom works by drawing small and enlarging once at the end: everything
+    is drawn 1:1 into a view surface of SCRWIDTH/pixelScale x
+    SCRHEIGHT/pixelScale, and Present() blows that up onto the real screen
+    with Surface::CopyToScaled. So nothing that draws has to know the zoom
+    exists, and the blitter never multiplies a coordinate.
+
+    Two coordinate spaces, do not mix them:
     - world pixels : where something is on the map, can be far off screen
-    - view pixels  : world pixels with the camera applied, zoom NOT applied.
-                     This is what DrawFrame takes.
-    - real pixels  : what lands in the screen buffer, view * pixelScale.
-
-    Everything outside this class works in world and view pixels only, so no
-    other file needs to know the zoom exists.
+    - view pixels  : world pixels with the camera applied. Everything drawn
+                     goes here, and this is what the draw calls below take.
     */
     class RenderManager
     {
     public:
-        // Call once, after the map is loaded and the tile size is known.
-        // A tileWidth of 0 or less leaves the safe 1:1 defaults alone.
+        // template.cpp never deletes the app, so Game has to call Unload();
+        // the destructor is only a safety net. Same pattern as the others.
+        ~RenderManager() { Unload(); }
+        void Unload();
+
+        // Works the zoom out from the map's tile size and creates the view
+        // surface. Call once, after the map is loaded. A tileWidth of 0 or
+        // less keeps the safe 1:1 defaults, so a failed map load still draws.
         void SetupZoom(int tileWidth);
 
-        // Places the camera so a world position lands at anchorX/anchorY of the
-        // view, as a fraction (0.5, 0.5 is dead centre). The anchor stays a
-        // parameter because where the player sits on screen is a gameplay call.
+        // Places the camera so a world position lands at anchorX/anchorY of
+        // the view, as a fraction (0.5, 0.5 is dead centre). The anchor stays
+        // a parameter because where the player sits on screen is a gameplay
+        // call, not a rendering one.
         void FollowTarget(float worldX, float worldY, float anchorX, float anchorY);
 
         int GetPixelScale() const { return pixelScale; }
@@ -54,6 +61,8 @@ namespace Tmpl8
         // what keeps a big map cheap: you only pay for tiles you can see.
         bool IsInView(int viewX, int viewY, int width, int height) const;
 
+        void Clear(unsigned int color) const;
+
         /*
         The one and only blitter. 'sheet' is a grid of frameWidth x frameHeight
         cells, left to right then top to bottom, and frameIndex picks one. That
@@ -62,23 +71,33 @@ namespace Tmpl8
         flipX/flipY mirror the cell, for Tiled's flip flags and for the player
         walking left.
         */
-        void DrawFrame(Surface* target, Surface* sheet,
+        void DrawFrame(Surface* sheet,
                        int frameWidth, int frameHeight, int frameIndex,
                        int viewX, int viewY,
                        bool flipX = false, bool flipY = false) const;
 
-        // Hollow rectangle outline in view pixels, for seeing collision shapes
-        // that are otherwise invisible.
-        void DrawBox(Surface* target, int viewX, int viewY,
-                     int width, int height, unsigned int color) const;
+        // Hollow rectangle outline, for seeing collision shapes that are
+        // otherwise invisible. One view pixel thick, so pixelScale thick once
+        // it reaches the screen.
+        void DrawBox(int viewX, int viewY, int width, int height,
+                     unsigned int color) const;
+
+        // Enlarges the view onto the real screen. Once per frame, last thing.
+        void Present(Surface* screen) const;
 
     private:
+        /*
+        Everything is drawn into this, at one view pixel per game pixel. Owned
+        here, created by SetupZoom, freed by Unload.
+        */
+        Surface* view = nullptr;
+
         /*
         Filled in by SetupZoom, do not set by hand. The 1:1 defaults matter: if
         no map loads we still draw something instead of dividing by zero.
 
         pixelScale -> real screen pixels per game pixel
-        viewWidth  -> how much world fits across, in small world pixels
+        viewWidth  -> how much world fits across, in game pixels
         */
         int pixelScale = 1;
         int viewWidth = SCRWIDTH;

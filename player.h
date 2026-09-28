@@ -37,9 +37,9 @@ namespace Tmpl8
         */
         void Update(float deltaTime, const List<Collider>& colliders);
 
-        // The renderer holds the camera and the zoom, so the Player only has
-        // to say where he is in the world.
-        void Draw(Surface* target, const RenderManager& renderer) const;
+        // The renderer holds the camera, the zoom and the surface, so the
+        // Player only has to say where he is in the world.
+        void Draw(const RenderManager& renderer) const;
 
         /*
         His solid box in world pixels. Deliberately NOT the sprite: the frame

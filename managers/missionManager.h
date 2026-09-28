@@ -57,7 +57,7 @@ namespace Tmpl8
 
         void Unload();
 
-        void Draw(Surface* target, const RenderManager& renderer) const;
+        void Draw(const RenderManager& renderer) const;
 
         // The level's solid rectangles in world pixels, handed to the Player.
         // By const reference: no copy, and he cannot edit the level.
