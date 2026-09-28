@@ -8,112 +8,77 @@ namespace Tmpl8
     class Surface;
     class RenderManager;
 
-    /*
-    This code:
-    One rectangle of tiles out of the Tiled JSON. A bounded map gives us a
-    single chunk covering everything, an infinite map gives us a lot of small
-    ones scattered over world space, so this struct covers both.
-    */
+    // One rectangle of tiles out of the JSON. A bounded map is a single chunk
+    // covering everything, an infinite map is many small ones scattered over
+    // world space, so this covers both.
     struct TileChunk
     {
-        int x = 0;          // tile offset X in the world
-        int y = 0;          // tile offset Y in the world
-        int width = 0;      // chunk width in tiles
-        int height = 0;     // chunk height in tiles
+        int x = 0;      // tile offset in the world, not pixels
+        int y = 0;
+        int width = 0;  // in tiles
+        int height = 0;
 
         /*
-        The RAW tile values straight from Tiled, flip flags still attached in
-        the top 4 bits. We used to mask those off while loading and throw them
-        away, wich meant a tile the level designer mirrored in Tiled got drawn
-        unmirrored. Now we keep the whole value and split it at draw time.
+        Raw tile values with Tiled's flip flags still in the top bits; Draw
+        splits them. Masking them off at load time would silently unmirror
+        every tile the level designer flipped.
 
-        It has to be unsigned: the horizontal flip flag is 0x80000000, wich
-        sets the sign bit. In a signed int that value is negative and the
-        comparisons against firstGid would go haywire.
+        Unsigned because the horizontal flip flag is 0x80000000, which in a
+        signed int is negative and would break the firstGid comparisons.
         */
         List<unsigned int> data;
     };
 
-    /*
-    This code:
-    One tileset image plus the global tile id its first tile owns. Tiled
-    numbers every tile in the whole map in one long sequence, so the only way
-    to know wich image a tile belongs to is to find the tileset with the
-    highest firstGid that is still <= that tile id. ResolveTile does that.
-
-    'surface' is owned by the MissionManager and freed in Unload().
-    */
+    // One tileset image plus the global id of its first tile. Tiled numbers
+    // every tile in the map in one sequence, so ResolveTile has to work out
+    // which sheet an id fell in.
     struct LoadedTileset
     {
         int firstGid = 1;
-        Surface* surface = nullptr;
+        Surface* surface = nullptr; // owned, freed in Unload
     };
 
     /*
-    This code:
-    The MissionManager owns the level: it parses the Tiled JSON, keeps the
-    tile data and the tileset images alive, and draws them.
+    Owns the level: parses the Tiled JSON, keeps the tile data and the tileset
+    images alive, and draws them.
 
-    Why it draws itself instead of handing its data to game.cpp:
-    it owns the tile data, so walking over that data belongs here. It does not
-    own any pixels or know about zoom, so for the actual drawing it asks the
-    RenderManager. That keeps the dependency one way round (mission -> render)
-    and keeps Game::Tick down to a handfull of lines.
-
-    Ownership:
-    the tileset Surfaces are raw pointers allocated with new, so the
-    destructor frees them. Loading a second mission frees the first one's
-    images before allocating the new ones.
+    It draws itself rather than handing its data out, because it owns that
+    data. It does not own pixels or know about zoom, so the actual drawing
+    goes through the RenderManager. That keeps the dependency one way round.
     */
     class MissionManager
     {
     public:
         ~MissionManager() { Unload(); }
 
-        /*
-        Parses the Tiled JSON and loads every tileset image it names. Returns
-        false and leaves the manager empty if the file is missing or broken,
-        so the caller can notice instead of running on with no map.
-        */
+        // False (and empty) if the file is missing or broken, so the caller
+        // can notice instead of running on with no map.
         bool Load(const char* jsonPath);
 
-        // Frees the tileset images and drops the tile data
         void Unload();
 
-        // Draws every visible tile of the mission through the renderer
         void Draw(Surface* target, const RenderManager& renderer) const;
 
-        /*
-        The solid rectangles of the level, in world pixels, straight from the
-        object layer of the JSON. Handed to the Player so he can be stopped by
-        them. Returned as a const reference: no copy is made and the caller
-        cannot change the level geometry, it can only read it.
-        */
+        // The level's solid rectangles in world pixels, handed to the Player.
+        // By const reference: no copy, and he cannot edit the level.
         const List<Collider>& GetColliders() const { return colliders; }
 
         int GetTileWidth() const { return tileWidth; }
         int GetTileHeight() const { return tileHeight; }
 
-        // A mission is only drawable if we have tiles AND images to draw them with
+        // Only drawable with tiles AND images to draw them with.
         bool IsLoaded() const { return !chunks.empty() && !tilesets.empty(); }
 
     private:
-        /*
-        Turns a Tiled global tile id into the sheet it lives on plus the cell
-        number inside that sheet. Returns nullptr for a tile id that belongs
-        to no loaded tileset.
-        */
+        // Global tile id -> the sheet it lives on plus the cell number inside
+        // it. nullptr for an id belonging to no loaded tileset.
         Surface* ResolveTile(int tileId, int& frameIndex) const;
 
         List<TileChunk> chunks;
         List<LoadedTileset> tilesets;
 
-        /*
-        Every rectangle in the object layer marked with the boolean property
-        "collider" in Tiled, each remembering whether it is also a one way
-        "platform". Plain data, no pointers, so the List copies them around
-        safely and there is nothing to free.
-        */
+        // Every object layer rectangle ticked "collider" in Tiled. Plain data,
+        // no pointers, so there is nothing to free.
         List<Collider> colliders;
 
         int tileWidth = 0;
