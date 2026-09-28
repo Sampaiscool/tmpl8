@@ -69,6 +69,7 @@ void Surface::Clear( uint c )
 	for (int i = 0; i < s; i++) pixels[i] = c;
 }
 
+// code taken from Jacco Bikker
 void Surface::CopyToScaled( Surface* d )
 {
   int h = d->height, w = d->width;
