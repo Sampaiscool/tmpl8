@@ -1,33 +1,20 @@
 #include "precomp.h"
 #include "renderManager.h"
-#include <iostream>
 
 namespace Tmpl8
 {
     /*
-    This code:
-    Decides how far to zoom in, using the tile size that came out of the
-    Tiled JSON. This is the only place the zoom is calculated.
+    You say how many tiles you want across (TILES_ON_SCREEN), the map says how
+    many pixels a tile is, so the world we want to show is that many pixels
+    wide. The real screen width divided by that is the scale.
 
-    The idea:
-    You say how many tiles you want to see (TILES_ON_SCREEN in
-    renderManager.h), the map says how many pixels a tile is, so the width we
-    want to show is TILES_ON_SCREEN * tileWidth game pixels. Divide the real
-    screen width by that and you get how many real pixels each game pixel
-    should become.
-
-    With the current map: 1280 / (32 * 16) = 1280 / 512 = 2.
-    Load a map with 32x32 tiles and it becomes 1280 / 1024 = 1, so you still
+    Current map: 1280 / (32 * 16) = 2. A 32x32 tileset gives 1, so you still
     see about the same amount of world instead of everything doubling.
 
-    Why integer division:
-    A fractional scale like 2.5 would make some pixels 2 real pixels wide and
-    others 3, wich looks uneven and wobbly on pixel art. Whole numbers keep
-    every game pixel exactly the same size.
-
-    The clamp to 1 matters: with very big tiles or very many of them the
-    division can come out 0, and a scale of 0 would make everything vanish
-    and divide by zero below.
+    Integer division on purpose: a scale like 2.5 would make some pixels 2 real
+    pixels wide and others 3, which looks wobbly on pixel art. The clamp to 1
+    matters because the division can come out 0, which would divide by zero
+    below and make everything vanish.
     */
     void RenderManager::SetupZoom(int tileWidth)
     {
@@ -36,25 +23,19 @@ namespace Tmpl8
         pixelScale = SCRWIDTH / (TILES_ON_SCREEN * tileWidth);
         if (pixelScale < 1) pixelScale = 1;
 
-        // How much world fits on screen once everything is that many times bigger
         viewWidth = SCRWIDTH / pixelScale;
         viewHeight = SCRHEIGHT / pixelScale;
 
-        std::cout << "Zoom: tiles are " << tileWidth << " px"
-                  << ", scale " << pixelScale << "x"
-                  << ", showing " << (viewWidth / tileWidth) << " tiles across"
-                  << std::endl;
+        printf( "Zoom: %i px tiles at %ix, showing %i tiles across\n",
+                tileWidth, pixelScale, viewWidth / tileWidth );
     }
 
     /*
-    This code:
-    Moves the camera so the target sits at the wanted spot on screen.
+    Substitute this offset into ToViewX and the target's own x cancels out, so
+    it always lands on anchorX * viewWidth wherever it is in the world.
 
-    Substitute this offset into ToViewX and the target's own x cancels out,
-    so it always lands on anchorX * viewWidth no matter where it is in the
-    world. viewWidth/viewHeight and not SCRWIDTH/SCRHEIGHT, because the
-    camera works in small world pixels: the zoom to real pixels only happens
-    at the very end, inside DrawFrame.
+    viewWidth and not SCRWIDTH: the camera works in small world pixels, the
+    zoom to real pixels only happens at the very end inside DrawFrame.
     */
     void RenderManager::FollowTarget(float worldX, float worldY, float anchorX, float anchorY)
     {
@@ -62,13 +43,8 @@ namespace Tmpl8
         cameraY = (viewHeight * anchorY) - worldY;
     }
 
-    /*
-    This code:
-    Rejects anything that is completely off screen. We allow one full
-    width/height of slack on the negative side, because something at
-    viewX = -10 still has most of its right half poking into the view and has
-    to be drawn.
-    */
+    // One full width/height of slack on the negative side, because something
+    // at viewX = -10 still has most of itself poking into the view.
     bool RenderManager::IsInView(int viewX, int viewY, int width, int height) const
     {
         return viewX > -width && viewX < viewWidth &&
@@ -76,46 +52,24 @@ namespace Tmpl8
     }
 
     /*
-    This code:
-    Copies one cell out of a sheet into the screen buffer, mirrored if asked
-    and blown up by pixelScale. This replaces both the old Game::BlitTile and
-    the old Player::DrawSprite, wich were two copies of this same loop.
+    Copies one cell of a sheet into the screen buffer, mirrored if asked and
+    blown up by pixelScale.
 
-    Finding the cell:
-    2D pixels live in RAM as one long 1D array, row after row, so the address
-    of a pixel is always Y * Width + X. Dividing the sheet size by the frame
-    size gives us how many cells fit across and down, and from the cell number
-    we get its top left corner with the same formula in reverse:
-    srcX = (frameIndex % columns) * frameWidth
-    srcY = (frameIndex / columns) * frameHeight
+    Finding the cell: pixels live in RAM as one long array, row after row, so a
+    pixel is at Y * Width + X. Dividing the sheet by the frame size gives how
+    many cells fit across, and the cell number turns back into a corner with
+    the same formula in reverse. A spritesheet is just the special case of one
+    row, so it needs no separate path.
 
-    A spritesheet with all frames next to eachother is just the special case
-    where columns equals the frame count and there is only one row, so it
-    needs no seperate code path.
+    Flipping reads the source row backwards instead of keeping a second
+    mirrored image on disk.
 
-    Flipping:
-    Instead of reading source pixel x we read (frameWidth - 1 - x), wich walks
-    the row backwards and mirrors it. Same idea for y. That is how a tile the
-    designer mirrored in Tiled and how the player walking left both work,
-    without a second flipped image on disk.
+    Transparency: pure black RGB counts as see-through and is skipped, which is
+    the same colour key the template's own Sprite uses. Kept pixels get full
+    alpha forced on.
 
-    The zoom:
-    Every source pixel is written as a pixelScale x pixelScale square of
-    identical pixels, so a 16x16 tile covers 32x32 real pixels at scale 2. No
-    blending or filtering, we just repeat the pixel, so the art stays crisp
-    and blocky instead of blurry.
-
-    Boundary protection & clipping:
-    Every write is checked against the target size. Writing outside the buffer
-    would corrupt memory or crash, so out of range pixels are simply skipped.
-    The checks sit inside the block loops, because a block can hang half off
-    the edge of the screen.
-
-    Color & transparency:
-    We mask off the alpha channel (c & 0xFFFFFF) to look at the pure RGB. Pure
-    black counts as transparent here and gets skipped. Every pixel we do keep
-    gets its top 8 bits forced to max (c | 0xFF000000) so it is drawn fully
-    opaque.
+    Clipping is worked out per row and per block instead of per written pixel,
+    so the innermost loop is a plain write with no branches in it.
     */
     void RenderManager::DrawFrame(Surface* target, Surface* sheet,
                                   int frameWidth, int frameHeight, int frameIndex,
@@ -125,107 +79,70 @@ namespace Tmpl8
         if (!target || !sheet || !sheet->pixels) return;
         if (frameWidth <= 0 || frameHeight <= 0) return;
 
-        // How many cells fit on the sheet, so we can turn frameIndex into x/y
-        int columns = sheet->width / frameWidth;
-        int rows = sheet->height / frameHeight;
+        const int columns = sheet->width / frameWidth;
+        const int rows = sheet->height / frameHeight;
         if (columns <= 0 || rows <= 0) return;
         if (frameIndex < 0 || frameIndex >= columns * rows) return;
 
-        // Cell number -> top left corner of that cell, in source pixels
-        int srcX = (frameIndex % columns) * frameWidth;
-        int srcY = (frameIndex / columns) * frameHeight;
+        // Cell number -> top left corner of that cell, in source pixels. These
+        // are inside the sheet by construction, so the read below needs no
+        // bounds check of its own.
+        const int srcX = (frameIndex % columns) * frameWidth;
+        const int srcY = (frameIndex / columns) * frameHeight;
 
-        uint* src = sheet->pixels;
+        const uint* src = sheet->pixels;
         uint* dst = target->pixels;
 
         for (int y = 0; y < frameHeight; ++y)
         {
-            // Walk the source rows backwards when flipped vertically
-            int sy = srcY + (flipY ? (frameHeight - 1 - y) : y);
-            if (sy < 0 || sy >= sheet->height) continue; // source Y bound check
+            const int sy = srcY + (flipY ? (frameHeight - 1 - y) : y);
+
+            // Which rows of this pixel's block land on screen. Only depends on
+            // y, so it is worked out once per source row.
+            const int blockY = (viewY + y) * pixelScale;
+            const int by0 = std::max(0, -blockY);
+            const int by1 = std::min(pixelScale, target->height - blockY);
+            if (by0 >= by1) continue; // whole row is off screen
+
+            const uint* srcRow = src + sy * sheet->width;
 
             for (int x = 0; x < frameWidth; ++x)
             {
-                // Walk the source row backwards when flipped horizontally
-                int sx = srcX + (flipX ? (frameWidth - 1 - x) : x);
-                if (sx < 0 || sx >= sheet->width) continue; // source X bound check
+                const int sx = srcX + (flipX ? (frameWidth - 1 - x) : x);
 
-                // 2D -> 1D offset formula: Y * Width + X
-                uint c = src[sy * sheet->width + sx];
+                uint c = srcRow[sx];
+                if ((c & 0xFFFFFF) == 0) continue; // transparent
+                c |= 0xFF000000;
 
-                // Skip black/transparent background pixels
-                if ((c & 0xFFFFFF) == 0) continue;
-                c |= 0xFF000000; // force alpha to 255 so the pixel is fully opaque
+                const int blockX = (viewX + x) * pixelScale;
+                const int bx0 = std::max(0, -blockX);
+                const int bx1 = std::min(pixelScale, target->width - blockX);
 
-                // This one source pixel becomes a pixelScale x pixelScale block
-                int blockX = (viewX + x) * pixelScale;
-                int blockY = (viewY + y) * pixelScale;
-
-                for (int by = 0; by < pixelScale; ++by)
+                for (int by = by0; by < by1; ++by)
                 {
-                    int py = blockY + by;
-                    if (py < 0 || py >= target->height) continue; // vertical clip
-
-                    for (int bx = 0; bx < pixelScale; ++bx)
-                    {
-                        int px = blockX + bx;
-                        if (px < 0 || px >= target->width) continue; // horizontal clip
-
-                        dst[py * target->width + px] = c;
-                    }
+                    uint* dstRow = dst + (blockY + by) * target->width;
+                    for (int bx = bx0; bx < bx1; ++bx) dstRow[blockX + bx] = c;
                 }
             }
         }
     }
 
     /*
-    This code:
-    Draws a hollow rectangle outline in view pixels, for debugging collision.
+    Surface::Box already draws a clipped outline, so this only has to do the
+    view -> real pixel conversion DrawFrame does and hand it over.
 
-    How it works:
-    it walks the outline only, not the inside. The top and bottom edges are
-    two horizontal runs, the left and right edges two vertical ones, so a big
-    box costs about as little as a small one and you can still see the level
-    through the middle.
-
-    Every pixel goes through the same view -> real conversion DrawFrame uses
-    (multiply by pixelScale), and gets the same clipping against the screen
-    buffer, so an outline that runs off the edge is cut instead of corrupting
-    memory. The outline is drawn 1 REAL pixel thick on purpose, not
-    pixelScale thick, so it stays a thin hairline that does not hide the art
-    it is drawn over.
+    The outline stays 1 REAL pixel thick rather than pixelScale thick, so it
+    is a hairline that does not hide the art underneath it.
     */
     void RenderManager::DrawBox(Surface* target, int viewX, int viewY,
                                 int width, int height, unsigned int color) const
     {
         if (!target || width <= 0 || height <= 0) return;
 
-        // view pixels -> real pixels, same conversion DrawFrame does
-        int left = viewX * pixelScale;
-        int top = viewY * pixelScale;
-        int right = (viewX + width) * pixelScale - 1;
-        int bottom = (viewY + height) * pixelScale - 1;
-
-        unsigned int* dst = target->pixels;
-        int targetWidth = target->width;
-        int targetHeight = target->height;
-
-        color |= 0xFF000000; // force alpha to 255 so the outline is solid
-
-        // top and bottom edges
-        for (int x = left; x <= right; ++x)
-        {
-            if (x < 0 || x >= targetWidth) continue;
-            if (top >= 0 && top < targetHeight) dst[top * targetWidth + x] = color;
-            if (bottom >= 0 && bottom < targetHeight) dst[bottom * targetWidth + x] = color;
-        }
-
-        // left and right edges
-        for (int y = top; y <= bottom; ++y)
-        {
-            if (y < 0 || y >= targetHeight) continue;
-            if (left >= 0 && left < targetWidth) dst[y * targetWidth + left] = color;
-            if (right >= 0 && right < targetWidth) dst[y * targetWidth + right] = color;
-        }
+        target->Box(viewX * pixelScale,
+                    viewY * pixelScale,
+                    (viewX + width) * pixelScale - 1,
+                    (viewY + height) * pixelScale - 1,
+                    color | 0xFF000000);
     }
 }

@@ -3,20 +3,15 @@
 namespace Tmpl8
 {
     /*
-    This code:
-    An AABB, short for Axis Aligned Bounding Box. It is just a rectangle: a
-    corner (x,y) plus a width and a height. "Axis aligned" means it is never
-    rotated, its sides always line up with the x and y axis.
+    An Axis Aligned Bounding Box: a rectangle that is never rotated. Because
+    the sides always line up with the axes, an overlap test is four
+    comparisons instead of real maths, cheap enough to run for every collider
+    every frame.
 
-    Why that matters:
-    Working out whether two ROTATED boxes touch is real maths. For two axis
-    aligned ones it is four comparisons, because two rectangles can only
-    overlap if they overlap on BOTH axis at the same time. Cheap enough to
-    run for every collider, every frame.
+    x/y/w/h in world pixels, which is exactly how Tiled stores its object
+    layer, so colliders copy across 1 to 1.
 
-    These come straight out of the Tiled JSON. The object layer stores every
-    collider as x/y/width/height in world pixels, wich is exactly this shape,
-    so we can copy them over 1 to 1.
+    (Tmpl8's own aabb in tmpl8math.h is 3D and SSE based, so it is no use here.)
     */
     struct AABB
     {
@@ -25,8 +20,7 @@ namespace Tmpl8
         float w = 0.0f;
         float h = 0.0f;
 
-        // The four edges, so the overlap test below reads like plain english.
-        // Remember y grows DOWNWARDS on a screen, so Top() is the small one.
+        // y grows DOWNWARDS on a screen, so Top() is the smaller number.
         float Left()   const { return x; }
         float Right()  const { return x + w; }
         float Top()    const { return y; }
@@ -34,46 +28,34 @@ namespace Tmpl8
     };
 
     /*
-    This code:
-    Returns true if two rectangles are really overlapping.
+    Proves the boxes are NOT separated, which is easier than proving they
+    overlap: if neither is fully left, right, above or below the other, they
+    have nowhere left to be except on top of eachother.
 
-    The trick is to prove they DONT touch instead, wich is much easier.
-    Two boxes are seperated if one is completely left of the other, or
-    completely right of it, or completely above it, or completely below it.
-    If none of those four are true, they have no way of avoiding eachother
-    and must be overlapping.
-
-    Note the <= and >= : two boxes that are exactly edge to edge count as NOT
-    touching. That is deliberate. After we push the player out of a wall he
-    ends up exactly against it, and if that counted as a hit he would be
-    detected as stuck inside the wall forever and jitter.
+    Touching edges deliberately count as NOT overlapping. Pushing the player
+    out of a wall leaves him exactly against it, and if that counted as a hit
+    he would read as stuck inside the wall and jitter.
     */
+    inline bool Overlaps(const AABB& a, const AABB& b)
+    {
+        if (a.Right()  <= b.Left())   return false;
+        if (a.Left()   >= b.Right())  return false;
+        if (a.Bottom() <= b.Top())    return false;
+        if (a.Top()    >= b.Bottom()) return false;
+        return true;
+    }
+
     /*
-    This code:
-    A piece of level geometry: the rectangle, plus how solid it is.
+    A piece of level geometry: the rectangle plus how solid it is. The flag
+    lives here and not in AABB because an AABB is pure geometry and gets used
+    for things that have no such rule, like the player's own body.
 
-    Why not just put the flag inside AABB?
-    Because an AABB is pure geometry and gets used for things that are not
-    level geometry at all, like the players own body. A "is this one way"
-    field would be meaningless there. Keeping them seperate means the maths
-    stays about rectangles and the gameplay rules live one layer up.
-
-    oneWay is the 'platform' boolean from Tiled. A normal collider blocks you
-    from every side; a one way platform only ever stops you from above, so you
-    can jump up THROUGH it and land on top.
+    oneWay is Tiled's 'platform' boolean: it only stops you from above, so you
+    can jump up through it and land on top.
     */
     struct Collider
     {
         AABB box;
         bool oneWay = false;
     };
-
-    inline bool Overlaps(const AABB& a, const AABB& b)
-    {
-        if (a.Right()  <= b.Left())   return false; // a is fully left of b
-        if (a.Left()   >= b.Right())  return false; // a is fully right of b
-        if (a.Bottom() <= b.Top())    return false; // a is fully above b
-        if (a.Top()    >= b.Bottom()) return false; // a is fully below b
-        return true;                                // no escape, they overlap
-    }
 }
