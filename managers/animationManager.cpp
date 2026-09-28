@@ -140,9 +140,6 @@ namespace Tmpl8
     starts. Everything else (the timer, the looping) works exactly like a
     normal clip, because as far as Update and Draw are concerned this is just
     another clip that happens to be shorter.
-
-    The range check matters: asking for frames 4..7 of a six frame sheet would
-    read past the end of the image and draw garbage, so we refuse instead.
     */
     int AnimationManager::AddSubClip(int sourceClip, unsigned int firstFrame,
                                      unsigned int frameCount, float frameDuration, bool loop)

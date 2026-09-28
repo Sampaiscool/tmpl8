@@ -91,7 +91,7 @@ namespace Tmpl8
     fast machine and crawl on a slow one.
 
     Why there is no state enum anymore:
-    Play() already ignores a clip that is the same one it is playing, and
+    Play() already ignores a clip that is the same o​ne it is playing, and
     restarts the timer for one that is not. That was the only thing the old
     PlayerState enum and the "did the state change" check were for, so
     "moving or not" can just pick a clip id directly.

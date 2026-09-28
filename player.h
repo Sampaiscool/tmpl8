@@ -255,21 +255,9 @@ namespace Tmpl8
         const float spriteBaseHeight = 34.0f;
 
         /*
-        The three numbers that decide how jumping feels. Tune these.
-
-        gravity     - how fast falling speeds up, in pixels per second per
-                      second. Higher = heavier, floatier games use less.
-        jumpSpeed   - the upward speed he gets the moment he jumps. The height
-                      this reaches is jumpSpeed^2 / (2 * gravity), so
-                      320*320 / (2*900) = about 57 pixels, wich is three and a
-                      half tiles on a 16 pixel grid.
-        maxFallSpeed- terminal velocity, the fastest he may ever fall. This is
-                      not for realism, it stops tunneling: with deltaTime
-                      clamped to 0.05s in game.cpp, the biggest step he can
-                      take in one frame is 600 * 0.05 = 30 pixels. The thinnest
-                      floor in the map is 37 pixels tall, so he can never skip
-                      straight through it between two frames.
+        The three numbers that decide how jumping feels.
         */
+
         const float gravity = 900.0f;
         const float jumpSpeed = 320.0f;
         const float maxFallSpeed = 600.0f;

@@ -14,14 +14,7 @@ namespace Tmpl8
     This code:
     Game is the glue, nothing more. It owns the managers, forwards input into
     them and decides the order things happen in each frame. Every actual job
-    lives in one manager:
-
-    MissionManager   - parses the Tiled JSON, owns the tile data and the
-                       tileset images, draws the level.
-    RenderManager    - owns the zoom and the camera and does all the pixel
-                       writing, for tiles and sprites alike.
-    AnimationManager - owned by the Player, owns the spritesheets and runs
-                       the frame timers.
+    lives in one manager.
 
     Everything the managers took over used to sit in this class: the tile
     structs, the tileset list, the zoom fields, the camera, the blitter and
