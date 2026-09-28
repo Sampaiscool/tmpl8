@@ -25,7 +25,11 @@ namespace Tmpl8
     class AnimationManager
     {
     public:
-        ~AnimationManager();
+        // Same pattern as MissionManager: the destructor is the safety net,
+        // but template.cpp never deletes the app, so whoever owns us has to
+        // call Unload() at a moment of their choosing or the sheets leak.
+        ~AnimationManager() { Unload(); }
+        void Unload();
 
         /*
         Loads a spritesheet whose frames sit next to eachother on one

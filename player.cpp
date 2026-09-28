@@ -14,8 +14,8 @@ namespace Tmpl8
 {
     /*
     Registers every animation and remembers the ids. The AnimationManagers own
-    the images, so there is no new and no delete in this file: when the Player
-    dies they die with him and free the sheets themselves.
+    the images, so there is no new and no delete in this file; Unload() is
+    what hands them back.
 
     The numbers per line are how many frames are on that sheet and how long one
     frame lasts in seconds (0.10 = 10fps). A trailing false means it plays once
@@ -62,6 +62,12 @@ namespace Tmpl8
         const int shootSheet = torso.AddClip( MARCO "shootTorsoMarco.png", 10, 0.06f );
         shootTorso   = torso.AddSubClip( shootSheet, 0, 4, 0.06f, true  );
         shootRelease = torso.AddSubClip( shootSheet, 4, 6, 0.08f, false );
+    }
+
+    void Player::Unload()
+    {
+        legs.Unload();
+        torso.Unload();
     }
 
     /*

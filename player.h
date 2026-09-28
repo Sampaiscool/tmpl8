@@ -25,6 +25,10 @@ namespace Tmpl8
     public:
         Player(); // loads the spritesheets into the animation managers
 
+        // Frees the spritesheets. Has to be called by hand because
+        // template.cpp never deletes the app, so no destructor here ever runs.
+        void Unload();
+
         /*
         Input, movement and animation for one frame. 'colliders' are the
         level's solid rectangles in world pixels; the Player is handed them

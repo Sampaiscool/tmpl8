@@ -4,7 +4,7 @@
 
 namespace Tmpl8
 {
-    AnimationManager::~AnimationManager()
+    void AnimationManager::Unload()
     {
         // Sub clips share the image of the clip they were cut from, so only
         // free through the clip that actually loaded it.

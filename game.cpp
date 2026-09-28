@@ -106,11 +106,14 @@ namespace Tmpl8
                          COLOR_PLAYER);
     }
 
-    // The managers are plain members and clean up after themselves, but
-    // Unload() is called anyway so the tileset images are freed at a moment we
-    // chose rather than whenever Game itself is destroyed.
+    /*
+    Everything here is a plain member with a destructor, but template.cpp
+    news the Game and never deletes it, so none of those destructors would
+    ever run. Freeing by hand is what actually gives the images back.
+    */
     void Game::Shutdown()
     {
+        player.Unload();
         mission.Unload();
     }
 
