@@ -4,8 +4,7 @@
 #include "assets.h"
 
 // X11 defines a macro called 'None' and tileson has a member with that name,
-// so without this the preprocessor rewrites tileson and the compile fails with
-// errors that make no sense. Linux only, but harmless everywhere.
+// so without this the preprocessor rewrites tileson and the compile fails.
 #ifdef None
 #undef None
 #endif
@@ -14,14 +13,70 @@
 
 namespace Tmpl8
 {
-    /*
-    How Tiled packs a tile: the low 28 bits are the id, the top bits are flip
-    flags. (Bit 29, the diagonal flip, would need a transpose and is not
-    supported here.)
-    */
+    // Tiled packs the tile id in the low 28 bits and flip flags in the top.
+    // (Bit 29, the diagonal flip, would need a transpose and is not supported.)
     static const unsigned int TILE_ID_MASK = 0x0FFFFFFFu;
     static const unsigned int TILE_FLIP_H  = 0x80000000u;
     static const unsigned int TILE_FLIP_V  = 0x40000000u;
+
+    // An object with an "enemy" string property naming the variant. A
+    // rectangle stands the enemy on the middle of its bottom edge, a point
+    // spawns it where you clicked.
+    static bool ReadEnemySpawn(tson::Object& object, EnemySpawn& spawn)
+    {
+        if (object.getProp("enemy") == nullptr) return false;
+
+        const std::string variant = object.get<std::string>("enemy");
+
+        // Always terminates, unlike strncpy.
+        snprintf(spawn.variant, sizeof(spawn.variant), "%s", variant.c_str());
+        if (spawn.variant[0] == '\0') return false;
+
+        const float x = static_cast<float>(object.getPosition().x);
+        const float y = static_cast<float>(object.getPosition().y);
+        const float w = static_cast<float>(object.getSize().x);
+        const float h = static_cast<float>(object.getSize().y);
+
+        if (w > 0.0f && h > 0.0f)
+        {
+            spawn.feetX = x + w * 0.5f;
+            spawn.feetY = y + h;
+        }
+        else
+        {
+            spawn.feetX = x;
+            spawn.feetY = y;
+        }
+
+        // Optional, so the common case needs no property at all.
+        if (object.getProp("facingRight") != nullptr)
+        {
+            spawn.facingRight = object.get<bool>("facingRight");
+        }
+
+        return true;
+    }
+
+    // Only objects ticked "collider" are solid. getProp returns null when the
+    // property is absent, so check before reading.
+    static bool ReadCollider(tson::Object& object, Collider& solid)
+    {
+        if (object.getProp("collider") == nullptr) return false;
+        if (!object.get<bool>("collider")) return false;
+
+        solid.box.x = static_cast<float>(object.getPosition().x);
+        solid.box.y = static_cast<float>(object.getPosition().y);
+        solid.box.w = static_cast<float>(object.getSize().x);
+        solid.box.h = static_cast<float>(object.getSize().y);
+
+        // Without the flag a collider is solid from every side.
+        if (object.getProp("platform") != nullptr)
+        {
+            solid.oneWay = object.get<bool>("platform");
+        }
+
+        return solid.box.w > 0.0f && solid.box.h > 0.0f; // else it can never be hit
+    }
 
     void MissionManager::Unload()
     {
@@ -33,20 +88,14 @@ namespace Tmpl8
         tilesets.clear();
         chunks.clear();
         colliders.clear();
+        enemySpawns.clear();
 
         tileWidth = 0;
         tileHeight = 0;
     }
 
-    /*
-    Parses the JSON and copies out the few things we need.
-
-    tileson hands back a unique_ptr to a whole parsed tree; letting it go out
-    of scope at the end frees all of that for us, so nothing in here leaks.
-
-    A failed parse returns before Unload(), so a broken file leaves the
-    previous mission intact instead of half destroying it.
-    */
+    // A failed parse returns before Unload(), so a broken file leaves the
+    // previous mission intact.
     bool MissionManager::Load(const char* jsonPath)
     {
         tson::Tileson tileson;
@@ -58,7 +107,7 @@ namespace Tmpl8
             return false;
         }
 
-        Unload(); // out with the old mission before putting the new one in
+        Unload();
 
         tileWidth = parsedMap->getTileSize().x;
         tileHeight = parsedMap->getTileSize().y;
@@ -68,9 +117,8 @@ namespace Tmpl8
             LoadedTileset loaded;
             loaded.firstGid = parsedTileset.getFirstgid();
 
-            // Tiled writes image paths relative to its own project root, and
-            // sometimes absolute. Keep only the filename and put our own
-            // folder in front of it.
+            // Tiled's paths are relative to its own project root, sometimes
+            // absolute. Keep the filename and put our folder in front.
             const std::filesystem::path imagePath(parsedTileset.getImagePath().string());
             const std::string localPath = std::string(ASSETS "maps/assets/") + imagePath.filename().string();
 
@@ -78,11 +126,8 @@ namespace Tmpl8
             tilesets.push_back(loaded);
         }
 
-        /*
-        One pass over the layers. The two kinds hold completely different
-        things, so they fill different lists: a tile layer is a grid of ids, an
-        object layer is free floating rectangles already in world pixels.
-        */
+        // Tile layers are a grid of ids, object layers free floating
+        // rectangles already in world pixels.
         for (tson::Layer& layer : parsedMap->getLayers())
         {
             if (layer.getType() == tson::LayerType::TileLayer)
@@ -96,9 +141,7 @@ namespace Tmpl8
                     chunk.width = parsedChunk.getSize().x;
                     chunk.height = parsedChunk.getSize().y;
 
-                    // Copy tileson's storage into our own List. The cast keeps
-                    // the bit pattern exactly, flip flags included; it only
-                    // changes how we are allowed to read it.
+                    // The cast keeps the bit pattern, flip flags included.
                     for (const auto& value : parsedChunk.getData())
                     {
                         chunk.data.push_back(static_cast<unsigned int>(value));
@@ -109,54 +152,31 @@ namespace Tmpl8
             }
             else if (layer.getType() == tson::LayerType::ObjectGroup)
             {
+                // Spawns first, so one object is never both.
                 for (tson::Object& object : layer.getObjects())
                 {
-                    /*
-                    Only objects the designer ticked "collider" on are solid.
-                    An object layer is also where spawn points and triggers
-                    will end up later, so everything else is left alone.
-
-                    getProp returns null when the property is simply absent, so
-                    that has to be checked before asking for the value.
-                    */
-                    if (object.getProp("collider") == nullptr) continue;
-                    if (!object.get<bool>("collider")) continue;
-
-                    Collider solid;
-                    solid.box.x = static_cast<float>(object.getPosition().x);
-                    solid.box.y = static_cast<float>(object.getPosition().y);
-                    solid.box.w = static_cast<float>(object.getSize().x);
-                    solid.box.h = static_cast<float>(object.getSize().y);
-
-                    // Optional. Without it a collider stays solid from every
-                    // side, which is why the default is false.
-                    if (object.getProp("platform") != nullptr)
+                    EnemySpawn spawn;
+                    if (ReadEnemySpawn(object, spawn))
                     {
-                        solid.oneWay = object.get<bool>("platform");
+                        enemySpawns.push_back(spawn);
+                        continue;
                     }
 
-                    if (solid.box.w <= 0.0f || solid.box.h <= 0.0f) continue; // can never be hit
-
-                    colliders.push_back(solid);
+                    Collider solid;
+                    if (ReadCollider(object, solid)) colliders.push_back(solid);
                 }
             }
         }
 
-        printf( "Mission loaded: %s (%i chunks, %i tilesets, %i colliders)\n",
-                jsonPath, chunks.size(), tilesets.size(), colliders.size() );
+        printf( "Mission loaded: %s (%i chunks, %i tilesets, %i colliders, %i enemy spawns)\n",
+                jsonPath, chunks.size(), tilesets.size(), colliders.size(),
+                enemySpawns.size() );
 
         return IsLoaded();
     }
 
-    /*
-    Tiled numbers the tiles of every tileset in one continuous sequence, so the
-    sheet we want is the one with the HIGHEST firstGid that is still <= the id.
-    Scanning them all rather than stopping at the first hit means the order
-    they happen to sit in does not matter.
-
-    Subtracting firstGid turns the global id into a cell number inside that one
-    sheet, which is what DrawFrame wants.
-    */
+    // Tiled numbers every tileset in one sequence, so the sheet we want has the
+    // highest firstGid still <= the id. Subtracting it gives the cell number.
     Surface* MissionManager::ResolveTile(int tileId, int& frameIndex) const
     {
         const LoadedTileset* best = nullptr;
@@ -173,12 +193,8 @@ namespace Tmpl8
         return best->surface;
     }
 
-    /*
-    Walks every tile of every chunk and draws the ones you can see. The early
-    continues do the heavy lifting: an empty cell costs one comparison and an
-    off screen tile costs two coordinate calculations, so we only pay the per
-    pixel price for tiles that are actually visible.
-    */
+    // The early continues are what keep a big map cheap: we only pay the per
+    // pixel price for visible tiles.
     void MissionManager::Draw(const RenderManager& renderer) const
     {
         if (!IsLoaded()) return;

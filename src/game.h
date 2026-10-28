@@ -7,18 +7,14 @@
 #include "managers/missionManager.h"
 #include "managers/renderManager.h"
 #include "player.h"
+#include "bullet.h"
+#include "enemy.h"
 
 namespace Tmpl8
 {
-    /*
-    Game is the glue and nothing more: it owns the managers and decides the
-    order things happen in each frame. Every actual job lives in a manager.
-
-    The input callbacks are empty because the template already keeps a key
-    state array of its own (keystate/IsKeyDown in template.cpp) and the Player
-    reads that directly. They still have to exist, TheApp declares them pure
-    virtual.
-    */
+    // Glue only: owns the managers and decides the order things happen in.
+    // The input callbacks are empty because the template keeps its own key
+    // state array, but TheApp declares them pure virtual so they must exist.
     class Game : public TheApp
     {
     public:
@@ -39,6 +35,14 @@ namespace Tmpl8
         MissionManager mission;
         RenderManager renderer;
         Player player;
+
+        // Part of the running level, not part of the Player: he only says
+        // when and where a shot left his gun.
+        BulletManager bullets;
+        EnemyManager enemies;
+
+        // The only camera state that survives between frames.
+        float cameraAnchorX = 0.0f;
     };
 
 } // namespace Tmpl8

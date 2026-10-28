@@ -47,7 +47,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>template;.;lib\glad;lib\glfw\include;lib\OpenCL\inc;lib\zlib;lib</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>template;.;src;lib\glad;lib\glfw\include;lib\OpenCL\inc;lib\zlib;lib</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>precomp.h</PrecompiledHeaderFile>
       <WarningLevel>Level4</WarningLevel>
@@ -121,11 +121,14 @@
   </ItemDefinitionGroup>
   <!-- END Custom section -->
   <ItemGroup>
-    <ClCompile Include="game.cpp" />
+    <ClCompile Include="src\game.cpp" />
     <ClCompile Include="managers\animationManager.cpp" />
     <ClCompile Include="managers\missionManager.cpp" />
     <ClCompile Include="managers\renderManager.cpp" />
-    <ClCompile Include="player.cpp" />
+    <ClCompile Include="src\player.cpp" />
+    <ClCompile Include="src\bullet.cpp" />
+    <ClCompile Include="src\collision.cpp" />
+    <ClCompile Include="src\enemy.cpp" />
     <ClCompile Include="template\opencl.cpp" />
     <ClCompile Include="template\opengl.cpp" />
     <ClCompile Include="template\scene.cpp">
@@ -144,12 +147,17 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cl\tools.cl" />
-    <ClInclude Include="game.h" />
-    <ClInclude Include="list.h" />
+    <ClInclude Include="src\game.h" />
+    <ClInclude Include="src\list.h" />
+    <ClInclude Include="src\aabb.h" />
+    <ClInclude Include="src\assets.h" />
     <ClInclude Include="managers\animationManager.h" />
     <ClInclude Include="managers\missionManager.h" />
     <ClInclude Include="managers\renderManager.h" />
-    <ClInclude Include="player.h" />
+    <ClInclude Include="src\player.h" />
+    <ClInclude Include="src\bullet.h" />
+    <ClInclude Include="src\collision.h" />
+    <ClInclude Include="src\enemy.h" />
     <ClInclude Include="template\common.h" />
     <ClInclude Include="template\opencl.h" />
     <ClInclude Include="template\opengl.h" />

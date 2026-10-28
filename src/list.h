@@ -2,26 +2,18 @@
 
 namespace Tmpl8
 {
-    /*
-    A hand written replacement for std::vector, written out by hand for the
-    assignment so the new[]/delete[] and the doubling strategy stay visible
-    instead of being hidden inside the STL.
-
-    m_Data     -> the heap block holding the elements
-    m_Capacity -> how many elements FIT in that block
-    m_Count    -> how many are actually in use
-    */
+    // A hand written std::vector, written out for the assignment so the
+    // new[]/delete[] and the doubling stay visible.
     template<typename T>
     class List
     {
     private:
         T* m_Data;
-        int m_Capacity;
-        int m_Count;
+        int m_Capacity; // how many elements fit in the block
+        int m_Count;    // how many are in use
 
-        // A heap block cannot grow in place, so allocate a bigger one, copy
-        // everything across and free the old one. Any pointer into the old
-        // block is dangling after this, the elements physically moved.
+        // A heap block cannot grow in place. 
+        // So allocate a bigger one and copy any pointer into the old block dangles after this.
         void Reallocate(int newCapacity)
         {
             T* newBlock = new T[newCapacity];
@@ -33,8 +25,7 @@ namespace Tmpl8
         }
 
     public:
-        // Members are initialised first because Reallocate does delete[] m_Data,
-        // and deleting an uninitialised pointer would crash.
+        // Initialised first, because Reallocate does delete[] m_Data.
         List() : m_Data(nullptr), m_Capacity(0), m_Count(0)
         {
             Reallocate(4);
@@ -46,11 +37,8 @@ namespace Tmpl8
             m_Data = nullptr;
         }
 
-        /*
-        Rule of Three. The compiler's default copy would copy the POINTER, so
-        two Lists would share one block and both destructors would free it.
-        These two do a deep copy instead, giving each List its own memory.
-        */
+        // Rule of Three. The default copy would share one block between two
+        // Lists and both destructors would free it.
         List(const List& other) : m_Data(nullptr), m_Capacity(0), m_Count(0)
         {
             m_Capacity = other.m_Capacity;
@@ -61,7 +49,7 @@ namespace Tmpl8
 
         List& operator=(const List& other)
         {
-            if (this != &other) // without this, a = a frees the data it then copies
+            if (this != &other) // without this, a = a frees what it then copies
             {
                 delete[] m_Data;
 
@@ -73,16 +61,23 @@ namespace Tmpl8
             return *this;
         }
 
-        // Doubling rather than growing by one: copying everything is expensive,
-        // so it has to happen less often the bigger the list gets.
+        // Doubling, so the copy happens less often as the list grows.
         void push_back(const T& element)
         {
             if (m_Count >= m_Capacity) Reallocate(m_Capacity * 2);
             m_Data[m_Count++] = element;
         }
 
-        // Keeps the block so refilling does not have to allocate again.
         void clear() { m_Count = 0; }
+
+        // Swaps the last element into the hole, so the ORDER changes. Removing
+        // while looping must not advance the index:
+        //     for (int i = 0; i < list.size(); )
+        //         if (dead) list.remove_at_swap(i); else ++i;
+        void remove_at_swap(int index)
+        {
+            m_Data[index] = m_Data[--m_Count];
+        }
 
         int size() const { return m_Count; }
         bool empty() const { return m_Count == 0; }
@@ -91,7 +86,6 @@ namespace Tmpl8
         T& operator[](int index) { return m_Data[index]; }
         const T& operator[](int index) const { return m_Data[index]; }
 
-        // Enough for a range-for: for (const Collider& c : colliders)
         T* begin() { return m_Data; }
         T* end() { return m_Data + m_Count; }
         const T* begin() const { return m_Data; }

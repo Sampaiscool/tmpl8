@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="game.cpp" />
+    <ClCompile Include="src\game.cpp" />
     <ClCompile Include="template\opencl.cpp">
       <Filter>template</Filter>
     </ClCompile>
@@ -23,7 +23,10 @@
     <ClCompile Include="template\scene.cpp">
       <Filter>template</Filter>
     </ClCompile>
-    <ClCompile Include="player.cpp" />
+    <ClCompile Include="src\player.cpp" />
+    <ClCompile Include="src\bullet.cpp" />
+    <ClCompile Include="src\collision.cpp" />
+    <ClCompile Include="src\enemy.cpp" />
     <ClCompile Include="managers\animationManager.cpp">
       <Filter>managers</Filter>
     </ClCompile>
@@ -35,7 +38,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="game.h" />
+    <ClInclude Include="src\game.h" />
     <ClInclude Include="template\common.h">
       <Filter>template</Filter>
     </ClInclude>
@@ -69,7 +72,10 @@
     <ClInclude Include="template\scene.h">
       <Filter>template</Filter>
     </ClInclude>
-    <ClInclude Include="player.h" />
+    <ClInclude Include="src\player.h" />
+    <ClInclude Include="src\bullet.h" />
+    <ClInclude Include="src\collision.h" />
+    <ClInclude Include="src\enemy.h" />
     <ClInclude Include="managers\animationManager.h">
       <Filter>managers</Filter>
     </ClInclude>
@@ -79,7 +85,7 @@
     <ClInclude Include="managers\renderManager.h">
       <Filter>managers</Filter>
     </ClInclude>
-    <ClInclude Include="list.h" />
+    <ClInclude Include="src\list.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md">

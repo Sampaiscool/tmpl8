@@ -1480,42 +1480,6 @@
                  "y":35.4017110827023
                 }, 
                 {
-                 "height":0,
-                 "id":17,
-                 "name":"",
-                 "opacity":1,
-                 "polygon":[
-                        {
-                         "x":0,
-                         "y":0
-                        }, 
-                        {
-                         "x":13.7673320877176,
-                         "y":-7.37535647556298
-                        }, 
-                        {
-                         "x":12.7839512243091,
-                         "y":0.983380863408399
-                        }],
-                 "properties":[
-                        {
-                         "name":"collider",
-                         "type":"bool",
-                         "value":true
-                        }, 
-                        {
-                         "name":"platform",
-                         "type":"bool",
-                         "value":true
-                        }],
-                 "rotation":0,
-                 "type":"ground1",
-                 "visible":true,
-                 "width":0,
-                 "x":978.463959091356,
-                 "y":34.4183302192939
-                }, 
-                {
                  "height":6.88366604385879,
                  "id":18,
                  "name":"",
@@ -1534,8 +1498,8 @@
                  "rotation":0,
                  "type":"ground1",
                  "visible":true,
-                 "width":135.214868718655,
-                 "x":991.73960074737,
+                 "width":144.191529400881,
+                 "x":982.762940065144,
                  "y":27.5346641754351
                 }, 
                 {
@@ -1560,8 +1524,7 @@
                  "width":31.959878060773,
                  "x":1055.16766643721,
                  "y":67.3615891434753
-                },
-            
+                }, 
                 {
                  "height":5.9002851804504,
                  "id":20,
@@ -1584,7 +1547,8 @@
                  "width":30.9764971973646,
                  "x":1039.92526305438,
                  "y":109.155275838332
-                }, 
+                },
+            
                 {
                  "height":5.40859474874618,
                  "id":21,
@@ -1699,6 +1663,42 @@
                  "width":93.9128724555021,
                  "x":1705.18241715016,
                  "y":45.2355197167863
+                }, 
+                {
+                 "height":30.9196,
+                 "id":27,
+                 "name":"bomber",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"enemy",
+                         "type":"string",
+                         "value":"bomber"
+                        }],
+                 "rotation":0,
+                 "type":"bomber",
+                 "visible":true,
+                 "width":18.9507,
+                 "x":-529.124262826651,
+                 "y":77.2990270496708
+                }, 
+                {
+                 "height":30.9196,
+                 "id":28,
+                 "name":"mummy",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"enemy",
+                         "type":"string",
+                         "value":"mummy"
+                        }],
+                 "rotation":0,
+                 "type":"bomber",
+                 "visible":true,
+                 "width":18.9507,
+                 "x":-775.483728216637,
+                 "y":86.2756877318971
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1707,7 +1707,7 @@
          "y":0
         }],
  "nextlayerid":5,
- "nextobjectid":26,
+ "nextobjectid":29,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.2",

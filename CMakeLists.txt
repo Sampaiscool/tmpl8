@@ -8,8 +8,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(myGame
-    game.cpp
-    player.cpp
+    src/game.cpp
+    src/player.cpp
+    src/bullet.cpp
+    src/collision.cpp
+    src/enemy.cpp
     managers/animationManager.cpp
     managers/missionManager.cpp
     managers/renderManager.cpp
@@ -24,7 +27,7 @@ add_executable(myGame
 
 set_target_properties(myGame PROPERTIES DEBUG_POSTFIX _debug)
 
-target_include_directories(myGame PRIVATE template . lib/glad lib)
+target_include_directories(myGame PRIVATE template src . lib/glad lib)
 
 target_precompile_headers(myGame PRIVATE template/precomp.h)
 

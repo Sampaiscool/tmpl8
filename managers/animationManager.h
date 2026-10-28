@@ -7,73 +7,56 @@ namespace Tmpl8
     class Surface;
     class RenderManager;
 
-    /*
-    Owns a set of spritesheets and keeps track of which one is playing and how
-    far along it is. You AddClip once and Play the id you get back, so an actor
-    only has to remember its clip ids.
+    // Which clip is running, which frame, and how long it has been up. Plain
+    // data with no pointers, so a List can copy it and one set of sheets can
+    // drive any number of actors, each on its own frame.
+    struct AnimationPlayer
+    {
+        int clip = -1;
+        unsigned int frame = 0;
+        float timer = 0.0f;
+    };
 
-    One instance is one layer. The Player runs two of them, legs and torso, so
-    what his legs do and what his arms do never touch eachother.
-
-    Why Surface and not the template's Sprite: Sprite has no frame timer, no
-    looping, no flipping and its scaled draw is unclipped, so none of the work
-    it does for us is work we need. We draw through RenderManager::DrawFrame,
-    which only wants the pixels and the frame size.
-
-    Every clip owns its Surface unless it borrowed one from another clip.
-    */
+    // Owns a set of spritesheets. AddClip once, then Play the id you get back.
+    // One instance is one layer: the Player runs two, legs and torso.
+    // Every call takes the caller's playhead and is const.
     class AnimationManager
     {
     public:
-        // Same pattern as MissionManager: the destructor is the safety net,
-        // but template.cpp never deletes the app, so whoever owns us has to
-        // call Unload() at a moment of their choosing or the sheets leak.
+        // template.cpp never deletes the app, so the owner calls Unload();
+        // the destructor is only a safety net.
         ~AnimationManager() { Unload(); }
         void Unload();
 
-        /*
-        Loads a spritesheet whose frames sit next to eachother on one
-        horizontal strip. frameDuration is seconds per frame, so 0.10 is 10fps.
-
-        loop false makes it a one shot: it holds the last frame instead of
-        starting over, which is what a jump needs.
-
-        Returns the clip id for Play(), or -1 if the sheet could not be used.
-        */
+        // frameDuration is seconds per frame (0.10 = 10fps). loop false makes
+        // a one shot that holds its last frame. Returns -1 if unusable.
         int AddClip(const char* sheetPath, unsigned int frameCount,
                     float frameDuration, bool loop = true);
 
-        /*
-        Makes a clip out of part of a clip already loaded, without reading the
-        disk again: the fall animation is just the last frames of the jump
-        sheet. The new clip SHARES the source image and must not free it.
-
-        firstFrame counts in the source sheet. Returns -1 if the range does not
-        fit.
-        */
+        // Part of a clip already loaded, without reading the disk again.
+        // shares the source image.
         int AddSubClip(int sourceClip, unsigned int firstFrame,
                        unsigned int frameCount, float frameDuration, bool loop = true);
 
-        // Size of one frame of whatever is playing, 0 if nothing is. Clips are
-        // not all the same size (jump is 64 tall, idle 34), and the Player
-        // needs the height to line the feet up.
-        int GetFrameWidth() const;
-        int GetFrameHeight() const;
+        // Safe every frame: replaying the running clip does nothing.
+        void Play(AnimationPlayer& player, int clip) const;
 
-        // True once a ONE SHOT clip is sitting on its last frame. A looping
-        // clip is never finished.
-        bool IsFinished() const;
+        void Update(AnimationPlayer& player, float deltaTime) const;
 
-        // Safe to call every frame: playing the clip that is already running
-        // does nothing, switching to another restarts it at frame 0.
-        void Play(int clip);
+        // True once a one shot sits on its last frame. A loop never finishes.
+        bool IsFinished(const AnimationPlayer& player) const;
 
-        void Update(float deltaTime);
-
-        // viewX/viewY are view pixels: camera applied, no zoom (the renderer
-        // enlarges its whole view in one go at the end of the frame).
-        void Draw(const RenderManager& renderer,
+        // viewX/viewY are view pixels: camera applied, no zoom.
+        void Draw(const AnimationPlayer& player, const RenderManager& renderer,
                   int viewX, int viewY, bool flipX) const;
+
+        // Clips are not all the same size (jump is 64 tall, idle 34).
+        int GetFrameWidth(int clip) const;
+        int GetFrameHeight(int clip) const;
+
+        // Is this pixel of the current frame solid? x/y are from the sheet's top
+        // left corner as drawn. The colour key is pure black, same as DrawFrame.
+        bool IsOpaqueAt(const AnimationPlayer& player, int x, int y, bool flipX) const;
 
     private:
         struct AnimationClip
@@ -89,9 +72,5 @@ namespace Tmpl8
         };
 
         List<AnimationClip> clips;
-
-        int currentClip = -1;
-        unsigned int currentFrame = 0;
-        float animTimer = 0.0f;
     };
 }
