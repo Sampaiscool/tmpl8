@@ -51,7 +51,7 @@ namespace Tmpl8
         // Muzzle position within the frame relative to the top-left corner.
         mummy.muzzleX = 34;
         mummy.muzzleY = 34;
-        mummy.maxHealth = 3;
+        mummy.maxHealth = 4;
         mummy.walkSpeed = 45.0f;
         mummy.sightRange = 280.0f;
         mummy.attackRange = 120.0f;

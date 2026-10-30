@@ -20,7 +20,7 @@ namespace Tmpl8
         bullet.speed = 520.0f;
         bullet.lift = 0.0f;
         bullet.gravity = 0.0f;
-        bullet.lifetime = 1.0f;
+        bullet.lifetime = 0.5f;
 
         // Arced grenade projectile.
         ProjectileInfo& grenade = kinds[PROJECTILE_GRENADE];
@@ -63,7 +63,7 @@ namespace Tmpl8
     // Instantiates explosion animation centered at collision/impact coordinates.
     void BulletManager::SpawnExplosion(float atX, float atY)
     {
-        if (explosionClip < 0) return; // Guard against uninitialized explosion sprite
+        if (explosionClip < 0) return; // If there is no explosion sprite it would break
 
         Explosion blast;
         blast.position.x = atX - explosionAnchorX;
@@ -97,7 +97,7 @@ namespace Tmpl8
         bullet.kind = kind;
         bullet.fromPlayer = fromPlayer;
         bullet.velocityX = facingRight ? info.speed : -info.speed;
-        bullet.velocityY = -info.lift; // Negative Y corresponds to upward movement
+        bullet.velocityY = -info.lift;
         bullet.lifetime = info.lifetime;
 
         const float offsetX = facingRight ? info.hitboxOffsetX : MirroredOffsetX(info);
@@ -110,7 +110,7 @@ namespace Tmpl8
         bullets.push_back(bullet);
     }
 
-    // Destroys projectile instance by index, triggering explosion effects if applicable.
+    // Destroys projectile instance by index, triggering explosion effects.
     void BulletManager::Kill(int index)
     {
         if (index < 0 || index >= bullets.size()) return;
@@ -185,10 +185,7 @@ namespace Tmpl8
         }
     }
 
-    /*
-    Sub-steps movement vector into smaller increments to prevent high-speed projectiles
-    from tunneling through thin colliders/walls between frames.
-    */
+    // Sub-steps movement vector into smaller increments to prevent high-speed projectiles from tunneling through thin colliders/walls between frames.
     bool BulletManager::Travel(Bullet& bullet, float moveX, float moveY,
                                const List<Collider>& colliders) const
     {

@@ -27,6 +27,9 @@
     <ClCompile Include="src\bullet.cpp" />
     <ClCompile Include="src\collision.cpp" />
     <ClCompile Include="src\enemy.cpp" />
+    <ClCompile Include="src\pow.cpp" />
+    <ClCompile Include="src\titleScreen.cpp" />
+    <ClCompile Include="src\victoryScreen.cpp" />
     <ClCompile Include="managers\animationManager.cpp">
       <Filter>managers</Filter>
     </ClCompile>
@@ -76,6 +79,9 @@
     <ClInclude Include="src\bullet.h" />
     <ClInclude Include="src\collision.h" />
     <ClInclude Include="src\enemy.h" />
+    <ClInclude Include="src\pow.h" />
+    <ClInclude Include="src\titleScreen.h" />
+    <ClInclude Include="src\victoryScreen.h" />
     <ClInclude Include="managers\animationManager.h">
       <Filter>managers</Filter>
     </ClInclude>

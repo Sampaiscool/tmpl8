@@ -129,6 +129,9 @@
     <ClCompile Include="src\bullet.cpp" />
     <ClCompile Include="src\collision.cpp" />
     <ClCompile Include="src\enemy.cpp" />
+    <ClCompile Include="src\pow.cpp" />
+    <ClCompile Include="src\titleScreen.cpp" />
+    <ClCompile Include="src\victoryScreen.cpp" />
     <ClCompile Include="template\opencl.cpp" />
     <ClCompile Include="template\opengl.cpp" />
     <ClCompile Include="template\scene.cpp">
@@ -158,6 +161,9 @@
     <ClInclude Include="src\bullet.h" />
     <ClInclude Include="src\collision.h" />
     <ClInclude Include="src\enemy.h" />
+    <ClInclude Include="src\pow.h" />
+    <ClInclude Include="src\titleScreen.h" />
+    <ClInclude Include="src\victoryScreen.h" />
     <ClInclude Include="template\common.h" />
     <ClInclude Include="template\opencl.h" />
     <ClInclude Include="template\opengl.h" />

@@ -20,20 +20,17 @@ namespace Tmpl8
         Player();      // loads the spritesheets
         void Unload(); // and hands them back; no destructor here ever runs
 
-        // 'colliders' are handed in rather than looked up, so he stays a thing
-        // that moves instead of a thing that knows what a mission is.
+        // colliders are handed in rather than looked up, so he doesn't know unnecessary things
         void Update(float deltaTime, const List<Collider>& colliders);
 
         void Draw(const RenderManager& renderer) const;
 
-        // His solid box in world pixels. Deliberately NOT the sprite: the frame
-        // is 34x34 but Marco does not fill it.
+        // His solid box in world pixels. Not the sprite because he does not fill it
         AABB GetBounds() const;
 
         void SetPosition(float x, float y) { position.x = x; position.y = y; }
 
-        // Did a shot go off this frame? He does NOT own the bullets: he says
-        // when and where he fired and Game does the spawning.
+        // Did a shot go off this frame? He does not own the bullets.
         bool JustFired() const { return firedThisFrame; }
 
         // The barrel tip in world pixels, for the pose on screen right now.
@@ -45,7 +42,6 @@ namespace Tmpl8
 
         bool IsFacingRight() const { return facingRight; }
 
-        // ---- for the HUD ----
         int GetHealth() const { return health; }
         int GetMaxHealth() const;
         bool IsAlive() const { return health > 0; }
@@ -60,8 +56,7 @@ namespace Tmpl8
         bodies instead and use torso = -1 for "nothing goes on top of this".
 
         shootX/shootY exist because shootTorsoMarco never went through the merge
-        tool, and each legs sheet holds his hips at a slightly different height.
-        Align that sheet one day and they all drop to zero.
+        tool, and it's like messed up or something idk
         */
         struct Pose
         {
@@ -77,17 +72,8 @@ namespace Tmpl8
         // layer (or, crouched, the whole body) is playing.
         void UpdateWeapon(float deltaTime, bool crouching, Pose& want);
 
-        /*
-        Where one layer's frame lands, as the top left corner in world pixels.
-        Draw and GetMuzzle both need this and must agree.
-
-        y: clips line up by their FEET, so the height of whatever is playing is
-        subtracted from where his feet are.
-
-        x: most frames are 34 wide and land on position.x. The wide ones (51 for
-        the firing sheets, 35 for the crouch walk) carry the extra as padding on
-        the GUN side, so a mirrored frame slides back by exactly that much.
-        */
+        // Where one layer's frame lands, as the top left corner in world pixels.
+        // Draw and GetMuzzle both need this and must agree.
         float2 FrameOrigin(const AnimationManager& layer, const AnimationPlayer& play,
                            float nudgeX, float nudgeY) const;
 
@@ -103,14 +89,8 @@ namespace Tmpl8
 
         Pose current; // what Update settled on; Draw just reads it
 
-        float2 position{ 100.0f, 100.0f }; // world pixels, NOT screen pixels
+        float2 position{ 100.0f, 100.0f }; // world pixels, not screen pixels
 
-        /*
-        Vertical speed, and unlike the horizontal input it SURVIVES between
-        frames. That is the difference between flying and falling: horizontal is
-        rebuilt from the keys every frame so letting go stops him dead, but
-        gravity keeps adding to this one. Negative is upwards.
-        */
         float velocityY = 0.0f;
 
         AnimationManager legs;
@@ -138,14 +118,13 @@ namespace Tmpl8
         int health = 0;
         int ammo = 0;
 
-        // While it runs he is untouchable AND flashing: one timer, because the
-        // flash is the window.
+        // While it runs he is untouchable and flashing.
         float invulnerableTimer = 0.0f;
 
         bool reloading = false;
         float reloadTimer = 0.0f;
 
-        // "Down now AND not down last frame" turns a held key into one press.
+        // Turns a held key into one press.
         bool jumpHeld = false;
     };
 }

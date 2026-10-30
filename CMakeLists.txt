@@ -13,6 +13,9 @@ add_executable(myGame
     src/bullet.cpp
     src/collision.cpp
     src/enemy.cpp
+    src/pow.cpp
+    src/titleScreen.cpp
+    src/victoryScreen.cpp
     managers/animationManager.cpp
     managers/missionManager.cpp
     managers/renderManager.cpp

@@ -50,12 +50,11 @@ namespace Tmpl8
         void Draw(const AnimationPlayer& player, const RenderManager& renderer,
                   int viewX, int viewY, bool flipX) const;
 
-        // Clips are not all the same size (jump is 64 tall, idle 34).
+        // Clips are not all the same size
         int GetFrameWidth(int clip) const;
         int GetFrameHeight(int clip) const;
 
-        // Is this pixel of the current frame solid? x/y are from the sheet's top
-        // left corner as drawn. The colour key is pure black, same as DrawFrame.
+        // Is this pixel of the current frame solid? x/y are from the sheet's top left corner as drawn. The color key is pure black, same as DrawFrame.
         bool IsOpaqueAt(const AnimationPlayer& player, int x, int y, bool flipX) const;
 
     private:

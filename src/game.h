@@ -9,6 +9,9 @@
 #include "player.h"
 #include "bullet.h"
 #include "enemy.h"
+#include "pow.h"
+#include "titleScreen.h"
+#include "victoryScreen.h"
 
 namespace Tmpl8
 {
@@ -30,7 +33,11 @@ namespace Tmpl8
         void KeyDown(int) {}
 
     private:
+        void DrawWorld();
         void DrawDebugColliders();
+
+        // Every enemy dead and every POW free.
+        bool MissionCleared() const;
 
         MissionManager mission;
         RenderManager renderer;
@@ -40,6 +47,17 @@ namespace Tmpl8
         // when and where a shot left his gun.
         BulletManager bullets;
         EnemyManager enemies;
+        PowManager pows;
+
+        // Shown until Enter is pressed; the mission is already loaded behind it.
+        TitleScreen title;
+        bool onTitle = true;
+
+        // Shown over the frozen level once the mission is cleared. The timer
+        // runs first, so the last POW can be seen running off.
+        VictoryScreen victory;
+        bool won = false;
+        float victoryDelay = 0.0f;
 
         // The only camera state that survives between frames.
         float cameraAnchorX = 0.0f;

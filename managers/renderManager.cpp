@@ -58,7 +58,7 @@ namespace Tmpl8
 
     // Copies one cell of a sheet into the view, mirrored if asked. Pixels live
     // in RAM row after row, so a pixel is at Y * Width + X. Flipping reads the
-    // source row backwards. Pure black RGB is the colour key.
+    // source row backwards. Pure black RGB is the color key.
     void RenderManager::DrawFrame(Surface* sheet,
                                   int frameWidth, int frameHeight, int frameIndex,
                                   int viewX, int viewY,

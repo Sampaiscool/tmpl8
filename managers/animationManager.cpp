@@ -170,7 +170,7 @@ namespace Tmpl8
 
         // Visual check: surface stores pixels in 'pixels' array as unsigned int / Pixel type.
         // Pure black (0x000000) is the color key / background.
-        auto c = clip.sheet->pixels[sheetX + sheetY * clip.sheet->width];
+        unsigned int c = clip.sheet->pixels[sheetX + sheetY * clip.sheet->width];
         return (c & 0xFFFFFF) != 0;
     }
   }

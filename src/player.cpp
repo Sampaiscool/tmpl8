@@ -20,7 +20,7 @@ namespace Tmpl8
         constexpr float invulnerableTime = 1.0f;
         constexpr float flashInterval = 0.07f; // seconds per blink
 
-        constexpr int magazineSize = 2;
+        constexpr int magazineSize = 5;
 
         constexpr float reloadTime = 0.95f;
 
