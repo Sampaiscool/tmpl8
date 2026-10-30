@@ -77,8 +77,8 @@ namespace Tmpl8
             return;
         }
 
-        // Won: the level stops where it was and the banner goes over it.
-        if (won)
+        // Won or dead: the level stops where it was and the banner goes over it.
+        if (missionOver)
         {
             victory.Update(dt);
             DrawWorld();
@@ -134,13 +134,20 @@ namespace Tmpl8
         // After the move, before the draw, or everything lags a frame behind.
         renderer.FollowTarget(body.x + body.w * 0.5f, cameraAnchorX);
 
-        if (MissionCleared())
+        // Dying ends it on the spot, no delay, so a last second death cannot
+        // still count as a win.
+        if (!player.IsAlive())
+        {
+            missionOver = true;
+            victory.Show(false, pows.GetRescued());
+        }
+        else if (MissionCleared())
         {
             victoryDelay += dt;
             if (victoryDelay >= VICTORY_DELAY)
             {
-                won = true;
-                victory.Show(pows.GetRescued());
+                missionOver = true;
+                victory.Show(true, pows.GetRescued());
             }
         }
 

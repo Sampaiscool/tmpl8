@@ -53,10 +53,11 @@ namespace Tmpl8
         TitleScreen title;
         bool onTitle = true;
 
-        // Shown over the frozen level once the mission is cleared. The timer
-        // runs first, so the last POW can be seen running off.
+        // Shown over the frozen level once the mission is cleared or the
+        // player dies. On a win the timer runs first, so the last POW can be
+        // seen running off.
         VictoryScreen victory;
-        bool won = false;
+        bool missionOver = false;
         float victoryDelay = 0.0f;
 
         // The only camera state that survives between frames.

@@ -14,7 +14,7 @@ namespace Tmpl8
 {
     namespace
     {
-        constexpr bool infiniteHealth = true;
+        constexpr bool infiniteHealth = false;
 
         constexpr int maxHealth = 3;
         constexpr float invulnerableTime = 1.0f;
@@ -244,7 +244,7 @@ namespace Tmpl8
         if (!infiniteHealth)
         {
             health -= amount;
-            if (health < 0) health = 0;
+            if (health <= 0) ;
         }
 
         invulnerableTimer = invulnerableTime;

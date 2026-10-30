@@ -4,10 +4,12 @@
 
 namespace Tmpl8
 {
-    static const char* HEADLINE_TEXT = "MISSION COMPLETE!";
+    static const char* WON_TEXT = "MISSION COMPLETE!";
+    static const char* LOST_TEXT = "GAME OVER";
     static const char* PROMPT_TEXT = "PRESS ESC TO QUIT";
 
-    static const unsigned int HEADLINE_COLOR = 0xFFD040;
+    static const unsigned int WON_COLOR = 0xFFD040;
+    static const unsigned int LOST_COLOR = 0xFF4030;
     static const unsigned int RESCUED_COLOR = 0xFFFFFF;
     static const unsigned int PROMPT_COLOR = 0xA0D8FF;
 
@@ -27,7 +29,6 @@ namespace Tmpl8
     {
         Unload();
         image = new Surface(imagePath);
-        headline = MakeText(HEADLINE_TEXT, HEADLINE_COLOR);
         prompt = MakeText(PROMPT_TEXT, PROMPT_COLOR);
     }
 
@@ -43,8 +44,11 @@ namespace Tmpl8
         prompt = nullptr;
     }
 
-    void VictoryScreen::Show(int powsRescued)
+    void VictoryScreen::Show(bool won, int powsRescued)
     {
+        delete headline;
+        headline = won ? MakeText(WON_TEXT, WON_COLOR) : MakeText(LOST_TEXT, LOST_COLOR);
+
         char text[32];
         snprintf(text, sizeof(text), "POWS RESCUED: %i", powsRescued);
 

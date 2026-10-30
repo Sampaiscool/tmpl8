@@ -4,9 +4,10 @@ namespace Tmpl8
 {
     class Surface;
 
-    // The "mission complete" banner, drawn over the frozen level once every
-    // enemy is dead and every POW is free. Straight to the screen, like the
-    // title, because it is not part of the game world.
+    // The end of mission banner, drawn over the frozen level: "mission
+    // complete" once every enemy is dead and every POW is free, "game over"
+    // when the player dies. Straight to the screen, like the title, because it
+    // is not part of the game world.
     class VictoryScreen
     {
     public:
@@ -14,8 +15,8 @@ namespace Tmpl8
         void Load(const char* imagePath);
         void Unload();
 
-        // Called once, when the mission is won; the count goes on the banner.
-        void Show(int powsRescued);
+        // Called once, when the mission ends either way; the count goes on the banner.
+        void Show(bool won, int powsRescued);
 
         void Update(float deltaTime);
 
